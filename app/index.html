@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pickleball Rally Analysis MVP</title>
+    <link rel="stylesheet" href="/app/styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Pickleball Rally Analysis</h1>
+      <p>1試合・1ポイント単位で、決着直前最大5打を逆順入力</p>
+    </header>
+
+    <main class="layout">
+      <section class="panel" id="match-list-panel">
+        <h2>試合一覧 / 作成</h2>
+        <form id="create-match-form" class="stack">
+          <input name="title" placeholder="試合名（例: 3月練習試合）" required />
+          <input name="opponentName" placeholder="対戦相手（例: Team A）" />
+          <div class="inline">
+            <input type="date" name="matchDate" required />
+            <select name="matchType" required>
+              <option value="singles">singles</option>
+              <option value="doubles" selected>doubles</option>
+            </select>
+          </div>
+          <button type="submit">試合を作成</button>
+        </form>
+        <ul id="match-list"></ul>
+      </section>
+
+      <section class="panel" id="point-input-panel">
+        <h2>ポイント入力</h2>
+        <div id="current-match-info" class="muted">試合を選択してください</div>
+        <form id="point-form" class="stack hidden">
+          <div class="inline">
+            <label>Point #<input name="pointNumber" type="number" min="1" required /></label>
+            <label>自分 <input name="myScoreAfter" type="number" min="0" /></label>
+            <label>相手 <input name="opponentScoreAfter" type="number" min="0" /></label>
+          </div>
+
+          <div class="inline">
+            <label>結果
+              <select name="pointResult" required>
+                <option value="">選択</option>
+                <option value="won">得点</option>
+                <option value="lost">失点</option>
+              </select>
+            </label>
+            <label>決まり方
+              <select name="finishType" required>
+                <option value="">選択</option>
+                <option value="my_winner">自分のウィナー</option>
+                <option value="opp_winner">相手のウィナー</option>
+                <option value="my_error">自分のミス</option>
+                <option value="opp_error">相手のミス</option>
+                <option value="other">その他</option>
+              </select>
+            </label>
+          </div>
+
+          <h3>ショット入力（逆順）</h3>
+          <p class="muted">Shot1=決まり球。未入力行は保存時に除外。</p>
+          <div id="shot-forms" class="stack"></div>
+
+          <label>メモ
+            <textarea name="memo" rows="2" placeholder="任意メモ"></textarea>
+          </label>
+
+          <div id="point-errors" class="error"></div>
+          <button type="submit">ポイントを保存</button>
+        </form>
+      </section>
+
+      <section class="panel" id="match-detail-panel">
+        <h2>試合詳細 / 分析</h2>
+        <div id="detail-empty" class="muted">試合を選択すると表示されます</div>
+        <div id="detail-content" class="hidden">
+          <h3>ポイント履歴</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>結果</th>
+                <th>決まり方</th>
+                <th>ショット数</th>
+              </tr>
+            </thead>
+            <tbody id="point-list"></tbody>
+          </table>
+
+          <h3>簡易分析</h3>
+          <div id="analysis"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app/app.js"></script>
+  </body>
+</html>
