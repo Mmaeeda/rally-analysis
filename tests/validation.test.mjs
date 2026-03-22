@@ -11,8 +11,8 @@ const baseDraft = {
   pressureLevel: 'normal',
   rallyLengthCategory: 'medium',
   shots: [
-    { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'Z5' },
-    { reverseOrder: 2, hitterSide: 'opponent', targetZoneId: 'Z8' },
+    { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'O5' },
+    { reverseOrder: 2, hitterSide: 'opponent', targetZoneId: 'M8' },
   ],
 };
 
@@ -26,8 +26,8 @@ test('validatePointInputDraft: shot continuity violation fails', () => {
   const result = validatePointInputDraft({
     ...baseDraft,
     shots: [
-      { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'Z5' },
-      { reverseOrder: 3, hitterSide: 'opponent', targetZoneId: 'Z1' },
+      { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'O5' },
+      { reverseOrder: 3, hitterSide: 'opponent', targetZoneId: 'M1' },
     ],
   });
 
@@ -51,9 +51,9 @@ test('validatePointInputDraft: missing tactical labels fails', () => {
 
 test('normalizeShots: removes empty shot rows', () => {
   const shots = normalizeShots([
-    { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'Z2' },
+    { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'O2' },
     { reverseOrder: 2 },
-    { reverseOrder: 3, targetZoneId: 'Z5' },
+    { reverseOrder: 3, targetZoneId: 'M5' },
   ]);
 
   assert.equal(shots.length, 2);

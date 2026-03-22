@@ -49,13 +49,6 @@
           <div class="point-composer">
             <section class="composer-main stack">
               <div class="inline">
-                <label>結果
-                  <select name="pointResult" required>
-                    <option value="">選択</option>
-                    <option value="won">得点</option>
-                    <option value="lost">失点</option>
-                  </select>
-                </label>
                 <label>決まり方
                   <select name="finishType" required>
                     <option value="">選択</option>
@@ -64,12 +57,6 @@
                     <option value="my_error">自分のミス</option>
                     <option value="opp_error">相手のミス</option>
                     <option value="other">その他</option>
-                  </select>
-                </label>
-                <label>決まり球を打った側
-                  <select name="lastShotHitter" required>
-                    <option value="me">自分</option>
-                    <option value="opponent">相手</option>
                   </select>
                 </label>
               </div>
@@ -102,9 +89,12 @@
               <div class="court-header">
                 <div>
                   <h3>コートをタップして入力</h3>
-                  <p class="muted">最初のタップが決まり球です。次のタップでその前の球、その次でさらに前の球を記録します。</p>
+                  <p class="muted">上 9 面が相手コート、下 9 面が自陣です。最初のタップで得失点を自動判定します。</p>
                 </div>
-                <div class="shot-step" id="shot-step-indicator">Shot1 を待機中</div>
+                <div class="stack compact-status">
+                  <div class="shot-step" id="shot-step-indicator">Shot1 を待機中</div>
+                  <div class="result-badge pending" id="point-result-indicator">得失点は最初のタップで自動判定</div>
+                </div>
               </div>
 
               <div class="court-board" id="court-board" aria-label="コート入力エリア"></div>

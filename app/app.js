@@ -2,7 +2,26 @@ import { validatePointInputDraft } from '../src/domain/validation.js';
 import { buildMatchAnalysis } from '../src/domain/analysis.js';
 
 const STORAGE_KEY = 'rally-analysis-v1';
-const ZONES = ['Z1','Z2','Z3','Z4','Z5','Z6','Z7','Z8','Z9'];
+const COURT_ZONES = [
+  { id: 'O1', courtSide: 'opponent', label: '1' },
+  { id: 'O2', courtSide: 'opponent', label: '2' },
+  { id: 'O3', courtSide: 'opponent', label: '3' },
+  { id: 'O4', courtSide: 'opponent', label: '4' },
+  { id: 'O5', courtSide: 'opponent', label: '5' },
+  { id: 'O6', courtSide: 'opponent', label: '6' },
+  { id: 'O7', courtSide: 'opponent', label: '7' },
+  { id: 'O8', courtSide: 'opponent', label: '8' },
+  { id: 'O9', courtSide: 'opponent', label: '9' },
+  { id: 'M1', courtSide: 'me', label: '1' },
+  { id: 'M2', courtSide: 'me', label: '2' },
+  { id: 'M3', courtSide: 'me', label: '3' },
+  { id: 'M4', courtSide: 'me', label: '4' },
+  { id: 'M5', courtSide: 'me', label: '5' },
+  { id: 'M6', courtSide: 'me', label: '6' },
+  { id: 'M7', courtSide: 'me', label: '7' },
+  { id: 'M8', courtSide: 'me', label: '8' },
+  { id: 'M9', courtSide: 'me', label: '9' },
+];
 const LABELS = {
   pointResult: { won: '得点', lost: '失点' },
   finishType: {
@@ -41,6 +60,7 @@ const el = {
   pointForm: document.getElementById('point-form'),
   courtBoard: document.getElementById('court-board'),
   shotStepIndicator: document.getElementById('shot-step-indicator'),
+  pointResultIndicator: document.getElementById('point-result-indicator'),
   shotPreviewEmpty: document.getElementById('shot-preview-empty'),
   shotPreviewList: document.getElementById('shot-preview-list'),
   undoShotButton: document.getElementById('undo-shot-button'),
@@ -121,21 +141,29 @@ function renderMetricRows(items, labels) {
   `;
 }
 
-function inferLastShotHitter(finishType) {
+function inferLastShotHitter(finishType, pointResult) {
   switch (finishType) {
     case 'my_winner':
-    case 'my_error':
-    case 'opp_error':
       return 'me';
     case 'opp_winner':
       return 'opponent';
+    case 'my_error':
+      return 'me';
+    case 'opp_error':
+      return 'opponent';
     default:
-      return null;
+      return pointResult === 'won' ? 'me' : 'opponent';
   }
 }
 
+function getAutoPointResult() {
+  const shot1 = state.pointComposer.shots.find((shot) => shot.reverseOrder === 1);
+  if (!shot1) return undefined;
+  return shot1.targetZoneId.startsWith('M') ? 'lost' : 'won';
+}
+
 function getLastShotHitter() {
-  return el.pointForm.lastShotHitter.value || 'me';
+  return inferLastShotHitter(el.pointForm.finishType.value, getAutoPointResult());
 }
 
 function deriveHitterForReverseOrder(reverseOrder, lastShotHitter) {
@@ -177,10 +205,15 @@ function renderShotComposer() {
   const nextShot = state.pointComposer.shots.length + 1;
   const nextHitter = deriveHitterForReverseOrder(nextShot, getLastShotHitter());
   const canAddMore = state.pointComposer.shots.length < 5;
+  const pointResult = getAutoPointResult();
 
   el.shotStepIndicator.textContent = canAddMore
     ? `Shot${nextShot} を待機中 (${nextHitter === 'me' ? '自分' : '相手'})`
     : '5球入力済み';
+  el.pointResultIndicator.textContent = pointResult
+    ? `自動判定: ${LABELS.pointResult[pointResult]}`
+    : '得失点は最初のタップで自動判定';
+  el.pointResultIndicator.className = `result-badge ${pointResult || 'pending'}`;
 
   el.shotPreviewEmpty.classList.toggle('hidden', state.pointComposer.shots.length > 0);
   el.shotPreviewList.innerHTML = [...state.pointComposer.shots]
@@ -201,17 +234,17 @@ function renderShotComposer() {
 function renderCourtBoard() {
   el.courtBoard.innerHTML = '';
 
-  ZONES.forEach((zone, index) => {
+  COURT_ZONES.forEach((zone) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'court-zone';
-    button.dataset.zoneId = zone;
+    button.className = `court-zone ${zone.courtSide}`;
+    button.dataset.zoneId = zone.id;
     button.innerHTML = `
-      <span>${zone}</span>
-      <small>${index < 3 ? '奥' : index > 5 ? '手前' : '中間'}</small>
+      <span>${zone.label}</span>
+      <small>${zone.courtSide === 'opponent' ? '相手コート' : '自陣'}</small>
     `;
     button.addEventListener('click', () => {
-      registerShot(zone);
+      registerShot(zone.id);
     });
     el.courtBoard.appendChild(button);
   });
@@ -227,12 +260,11 @@ function collectPointDraftFromForm(form, matchId) {
     pointNumber: Number(fd.get('pointNumber')),
     myScoreAfter: fd.get('myScoreAfter') === '' ? undefined : Number(fd.get('myScoreAfter')),
     opponentScoreAfter: fd.get('opponentScoreAfter') === '' ? undefined : Number(fd.get('opponentScoreAfter')),
-    pointResult: fd.get('pointResult') || undefined,
+    pointResult: getAutoPointResult(),
     finishType: fd.get('finishType') || undefined,
     serverSide: fd.get('serverSide') || undefined,
     pressureLevel: fd.get('pressureLevel') || undefined,
     rallyLengthCategory: fd.get('rallyLengthCategory') || undefined,
-    lastShotHitter: fd.get('lastShotHitter') || undefined,
     memo: fd.get('memo') || undefined,
     shots: state.pointComposer.shots,
   };
@@ -393,15 +425,6 @@ el.createMatchForm.addEventListener('submit', (e) => {
 });
 
 el.pointForm.finishType.addEventListener('change', () => {
-  const inferred = inferLastShotHitter(el.pointForm.finishType.value);
-  if (inferred) {
-    el.pointForm.lastShotHitter.value = inferred;
-  }
-  syncComposerHitters();
-  renderShotComposer();
-});
-
-el.pointForm.lastShotHitter.addEventListener('change', () => {
   syncComposerHitters();
   renderShotComposer();
 });
@@ -459,7 +482,6 @@ el.pointForm.addEventListener('submit', (e) => {
   setFeedback('ポイントを保存しました', 'success');
   resetPointComposer();
   el.pointForm.reset();
-  el.pointForm.lastShotHitter.value = 'me';
   el.pointForm.serverSide.value = 'me';
   el.pointForm.pressureLevel.value = 'normal';
   el.pointForm.rallyLengthCategory.value = 'medium';
