@@ -165,6 +165,11 @@ function zoneLabel(zoneId) {
   return `${side}${zoneId.slice(1)}`;
 }
 
+function courtSideFromZoneId(zoneId) {
+  if (!zoneId) return undefined;
+  return zoneId.startsWith('O') ? 'opponent' : 'me';
+}
+
 function getZoneCenter(zoneId, width, height) {
   const zone = COURT_ZONES.find((item) => item.id === zoneId);
   if (!zone) return null;
@@ -326,6 +331,12 @@ function resetPointFormForCreate(match) {
 function registerShot(zoneId, isMistake = false) {
   if (state.pointComposer.shots.length >= 5) {
     setFeedback('入力できるのは最大5球までです。保存するか、1つ戻してください。', 'error');
+    return;
+  }
+
+  const previousShot = state.pointComposer.shots[state.pointComposer.shots.length - 1];
+  if (previousShot && courtSideFromZoneId(previousShot.targetZoneId) === courtSideFromZoneId(zoneId)) {
+    setFeedback('同じコート側に連続して打球は入りません。反対側コートをタップしてください。', 'error');
     return;
   }
 

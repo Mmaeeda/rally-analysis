@@ -35,6 +35,22 @@ test('validatePointInputDraft: shot continuity violation fails', () => {
   assert.equal(result.errors.includes('ショットは決まり球から連続して入力してください'), true);
 });
 
+test('validatePointInputDraft: same court side twice fails', () => {
+  const result = validatePointInputDraft({
+    ...baseDraft,
+    shots: [
+      { reverseOrder: 1, hitterSide: 'me', targetZoneId: 'O5' },
+      { reverseOrder: 2, hitterSide: 'opponent', targetZoneId: 'O1' },
+    ],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.errors.includes('連続するショットは必ずネットを越えて反対側コートに入っている必要があります'),
+    true,
+  );
+});
+
 test('validatePointInputDraft: missing tactical labels fails', () => {
   const result = validatePointInputDraft({
     ...baseDraft,

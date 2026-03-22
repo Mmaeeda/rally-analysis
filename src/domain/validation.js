@@ -20,6 +20,7 @@ const errorMessages = {
   hitterSide: "打った側を選択してください",
   zone: "コート位置を選択してください",
   contiguous: "ショットは決まり球から連続して入力してください",
+  alternatingCourtSides: "連続するショットは必ずネットを越えて反対側コートに入っている必要があります",
 };
 
 function isOneOf(value, allowed) {
@@ -28,6 +29,13 @@ function isOneOf(value, allowed) {
 
 function isShotFilled(shot) {
   return shot && (shot.hitterSide !== undefined || shot.targetZoneId !== undefined || shot.note);
+}
+
+function courtSideFromZoneId(zoneId) {
+  if (typeof zoneId !== "string") return undefined;
+  if (zoneId.startsWith("O")) return "opponent";
+  if (zoneId.startsWith("M")) return "me";
+  return undefined;
 }
 
 export function normalizeShots(shots) {
@@ -98,6 +106,15 @@ export function validatePointInputDraft(draft) {
     const expected = i + 1;
     if (normalizedShots[i].reverseOrder !== expected) {
       errors.push(errorMessages.contiguous);
+      break;
+    }
+  }
+
+  for (let i = 1; i < normalizedShots.length; i += 1) {
+    const previousCourtSide = courtSideFromZoneId(normalizedShots[i - 1].targetZoneId);
+    const currentCourtSide = courtSideFromZoneId(normalizedShots[i].targetZoneId);
+    if (previousCourtSide && currentCourtSide && previousCourtSide === currentCourtSide) {
+      errors.push(errorMessages.alternatingCourtSides);
       break;
     }
   }
