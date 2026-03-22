@@ -29,6 +29,9 @@ const LABELS = {
 const state = {
   matches: [],
   selectedMatchId: null,
+  pointComposer: {
+    shots: [],
+  },
 };
 
 const el = {
@@ -36,7 +39,12 @@ const el = {
   matchList: document.getElementById('match-list'),
   currentMatchInfo: document.getElementById('current-match-info'),
   pointForm: document.getElementById('point-form'),
-  shotForms: document.getElementById('shot-forms'),
+  courtBoard: document.getElementById('court-board'),
+  shotStepIndicator: document.getElementById('shot-step-indicator'),
+  shotPreviewEmpty: document.getElementById('shot-preview-empty'),
+  shotPreviewList: document.getElementById('shot-preview-list'),
+  undoShotButton: document.getElementById('undo-shot-button'),
+  clearShotsButton: document.getElementById('clear-shots-button'),
   pointFeedback: document.getElementById('point-feedback'),
   detailEmpty: document.getElementById('detail-empty'),
   detailContent: document.getElementById('detail-content'),
@@ -113,18 +121,106 @@ function renderMetricRows(items, labels) {
   `;
 }
 
-function createEmptyShots() {
-  return [1,2,3,4,5].map((reverseOrder) => ({ reverseOrder }));
+function inferLastShotHitter(finishType) {
+  switch (finishType) {
+    case 'my_winner':
+    case 'my_error':
+    case 'opp_error':
+      return 'me';
+    case 'opp_winner':
+      return 'opponent';
+    default:
+      return null;
+  }
+}
+
+function getLastShotHitter() {
+  return el.pointForm.lastShotHitter.value || 'me';
+}
+
+function deriveHitterForReverseOrder(reverseOrder, lastShotHitter) {
+  if (reverseOrder % 2 === 1) return lastShotHitter;
+  return lastShotHitter === 'me' ? 'opponent' : 'me';
+}
+
+function syncComposerHitters() {
+  const lastShotHitter = getLastShotHitter();
+  state.pointComposer.shots = state.pointComposer.shots.map((shot) => ({
+    ...shot,
+    hitterSide: deriveHitterForReverseOrder(shot.reverseOrder, lastShotHitter),
+  }));
+}
+
+function resetPointComposer() {
+  state.pointComposer.shots = [];
+}
+
+function registerShot(zoneId) {
+  if (state.pointComposer.shots.length >= 5) {
+    setFeedback('入力できるのは最大5球までです。保存するか、1つ戻してください。', 'error');
+    return;
+  }
+
+  const reverseOrder = state.pointComposer.shots.length + 1;
+  const shot = {
+    reverseOrder,
+    hitterSide: deriveHitterForReverseOrder(reverseOrder, getLastShotHitter()),
+    targetZoneId: zoneId,
+  };
+
+  state.pointComposer.shots.push(shot);
+  setFeedback(`${reverseOrder}球目を記録しました`, 'success');
+  renderShotComposer();
+}
+
+function renderShotComposer() {
+  const nextShot = state.pointComposer.shots.length + 1;
+  const nextHitter = deriveHitterForReverseOrder(nextShot, getLastShotHitter());
+  const canAddMore = state.pointComposer.shots.length < 5;
+
+  el.shotStepIndicator.textContent = canAddMore
+    ? `Shot${nextShot} を待機中 (${nextHitter === 'me' ? '自分' : '相手'})`
+    : '5球入力済み';
+
+  el.shotPreviewEmpty.classList.toggle('hidden', state.pointComposer.shots.length > 0);
+  el.shotPreviewList.innerHTML = [...state.pointComposer.shots]
+    .sort((a, b) => a.reverseOrder - b.reverseOrder)
+    .map((shot) => `
+      <div class="shot-preview-item">
+        <span class="tag-pill">Shot${shot.reverseOrder}</span>
+        <span>${shot.targetZoneId}</span>
+        <span class="muted">${shot.hitterSide === 'me' ? '自分' : '相手'}</span>
+      </div>
+    `)
+    .join('');
+
+  el.undoShotButton.disabled = state.pointComposer.shots.length === 0;
+  el.clearShotsButton.disabled = state.pointComposer.shots.length === 0;
+}
+
+function renderCourtBoard() {
+  el.courtBoard.innerHTML = '';
+
+  ZONES.forEach((zone, index) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'court-zone';
+    button.dataset.zoneId = zone;
+    button.innerHTML = `
+      <span>${zone}</span>
+      <small>${index < 3 ? '奥' : index > 5 ? '手前' : '中間'}</small>
+    `;
+    button.addEventListener('click', () => {
+      registerShot(zone);
+    });
+    el.courtBoard.appendChild(button);
+  });
+
+  renderShotComposer();
 }
 
 function collectPointDraftFromForm(form, matchId) {
   const fd = new FormData(form);
-  const shots = [1,2,3,4,5].map((n) => ({
-    reverseOrder: n,
-    hitterSide: fd.get(`shot-${n}-hitter`) || undefined,
-    targetZoneId: fd.get(`shot-${n}-zone`) || undefined,
-    note: fd.get(`shot-${n}-note`) || undefined,
-  }));
 
   return {
     matchId,
@@ -136,48 +232,10 @@ function collectPointDraftFromForm(form, matchId) {
     serverSide: fd.get('serverSide') || undefined,
     pressureLevel: fd.get('pressureLevel') || undefined,
     rallyLengthCategory: fd.get('rallyLengthCategory') || undefined,
+    lastShotHitter: fd.get('lastShotHitter') || undefined,
     memo: fd.get('memo') || undefined,
-    shots,
+    shots: state.pointComposer.shots,
   };
-}
-
-function renderShotForms() {
-  el.shotForms.innerHTML = '';
-
-  createEmptyShots().forEach((shot) => {
-    const card = document.createElement('div');
-    card.className = 'shot-card stack';
-
-    const title = shot.reverseOrder === 1 ? 'Shot 1（決まり球・必須）' : `Shot ${shot.reverseOrder}（任意）`;
-    card.innerHTML = `
-      <strong>${title}</strong>
-      <div class="inline">
-        <label><input type="radio" name="shot-${shot.reverseOrder}-hitter" value="me" /> 自分</label>
-        <label><input type="radio" name="shot-${shot.reverseOrder}-hitter" value="opponent" /> 相手</label>
-      </div>
-      <input type="hidden" name="shot-${shot.reverseOrder}-zone" value="" />
-      <div class="zone-grid" id="zone-grid-${shot.reverseOrder}"></div>
-      <input name="shot-${shot.reverseOrder}-note" placeholder="ショットメモ（任意）" />
-    `;
-
-    el.shotForms.appendChild(card);
-
-    const grid = card.querySelector(`#zone-grid-${shot.reverseOrder}`);
-    const hidden = card.querySelector(`input[name='shot-${shot.reverseOrder}-zone']`);
-
-    ZONES.forEach((zone) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'zone-btn';
-      button.textContent = zone;
-      button.addEventListener('click', () => {
-        hidden.value = zone;
-        [...grid.querySelectorAll('.zone-btn')].forEach((b) => b.classList.remove('active'));
-        button.classList.add('active');
-      });
-      grid.appendChild(button);
-    });
-  });
 }
 
 function nextPointNumber(match) {
@@ -222,6 +280,7 @@ function renderPointForm() {
   el.currentMatchInfo.textContent = `${match.title} / ${match.matchDate} / ${match.playerLabel || '自チーム未設定'} / point数: ${match.points.length}`;
   el.pointForm.classList.remove('hidden');
   el.pointForm.pointNumber.value = String(nextPointNumber(match));
+  renderShotComposer();
 }
 
 function renderDetails() {
@@ -333,6 +392,32 @@ el.createMatchForm.addEventListener('submit', (e) => {
   render();
 });
 
+el.pointForm.finishType.addEventListener('change', () => {
+  const inferred = inferLastShotHitter(el.pointForm.finishType.value);
+  if (inferred) {
+    el.pointForm.lastShotHitter.value = inferred;
+  }
+  syncComposerHitters();
+  renderShotComposer();
+});
+
+el.pointForm.lastShotHitter.addEventListener('change', () => {
+  syncComposerHitters();
+  renderShotComposer();
+});
+
+el.undoShotButton.addEventListener('click', () => {
+  state.pointComposer.shots.pop();
+  setFeedback('直前の球を取り消しました', 'success');
+  renderShotComposer();
+});
+
+el.clearShotsButton.addEventListener('click', () => {
+  resetPointComposer();
+  setFeedback('ショット入力をクリアしました', 'success');
+  renderShotComposer();
+});
+
 el.pointForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const match = selectedMatch();
@@ -372,14 +457,15 @@ el.pointForm.addEventListener('submit', (e) => {
 
   saveState();
   setFeedback('ポイントを保存しました', 'success');
+  resetPointComposer();
   el.pointForm.reset();
+  el.pointForm.lastShotHitter.value = 'me';
   el.pointForm.serverSide.value = 'me';
   el.pointForm.pressureLevel.value = 'normal';
   el.pointForm.rallyLengthCategory.value = 'medium';
-  renderShotForms();
   render();
 });
 
 loadState();
-renderShotForms();
+renderCourtBoard();
 render();
