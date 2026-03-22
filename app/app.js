@@ -1,5 +1,6 @@
 import { validatePointInputDraft } from '../src/domain/validation.js';
 import { buildMatchAnalysis } from '../src/domain/analysis.js';
+import { SUPABASE_DEFAULT_CONFIG } from './supabase-config.js';
 
 const STORAGE_KEY = 'rally-analysis-v1';
 const SYNC_CONFIG_KEY = 'rally-analysis-sync-config-v1';
@@ -51,6 +52,7 @@ const state = {
   matches: [],
   selectedMatchId: null,
   editingPointId: null,
+  supabaseSession: null,
   pointComposer: {
     shots: [],
   },
@@ -90,17 +92,21 @@ const el = {
   importJsonFile: document.getElementById('import-json-file'),
   supabaseUrl: document.getElementById('supabase-url'),
   supabaseAnonKey: document.getElementById('supabase-anon-key'),
-  supabaseUserId: document.getElementById('supabase-user-id'),
+  supabaseAuthEmail: document.getElementById('supabase-auth-email'),
+  supabaseAuthStatus: document.getElementById('supabase-auth-status'),
   saveSyncConfigButton: document.getElementById('save-sync-config-button'),
   pushSupabaseButton: document.getElementById('push-supabase-button'),
   pullSupabaseButton: document.getElementById('pull-supabase-button'),
   syncSupabaseButton: document.getElementById('sync-supabase-button'),
-  supabaseSyncSecret: document.getElementById('supabase-sync-secret'),
+  supabaseLoginButton: document.getElementById('supabase-login-button'),
+  supabaseLogoutButton: document.getElementById('supabase-logout-button'),
   downloadAiJsonlButton: document.getElementById('download-ai-jsonl-button'),
   downloadAiCsvButton: document.getElementById('download-ai-csv-button'),
 };
 
 const currentPage = document.body?.dataset.page || 'unknown';
+let supabaseClientPromise = null;
+let supabaseClientConfigKey = '';
 
 function uid() {
   return crypto.randomUUID();
@@ -136,12 +142,6 @@ function loadSyncConfig() {
 
 function saveSyncConfig(config) {
   localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
-}
-
-async function sha256Hex(value) {
-  const encoded = new TextEncoder().encode(value);
-  const buffer = await crypto.subtle.digest('SHA-256', encoded);
-  return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function replaceInputUrlWithoutEdit() {
@@ -551,36 +551,129 @@ function getSyncConfigFromInputs() {
   return {
     url: el.supabaseUrl?.value.trim() || '',
     anonKey: el.supabaseAnonKey?.value.trim() || '',
-    userId: el.supabaseUserId?.value.trim() || '',
-    syncSecret: el.supabaseSyncSecret?.value || '',
+    authEmail: el.supabaseAuthEmail?.value.trim() || '',
   };
 }
 
 function renderSyncConfig() {
-  const config = loadSyncConfig();
+  const config = {
+    ...SUPABASE_DEFAULT_CONFIG,
+    ...loadSyncConfig(),
+  };
   if (el.supabaseUrl) el.supabaseUrl.value = config.url || '';
   if (el.supabaseAnonKey) el.supabaseAnonKey.value = config.anonKey || '';
-  if (el.supabaseUserId) el.supabaseUserId.value = config.userId || '';
-  if (el.supabaseSyncSecret) el.supabaseSyncSecret.value = config.syncSecret || '';
+  if (el.supabaseAuthEmail) el.supabaseAuthEmail.value = config.authEmail || '';
+  renderAuthStatus();
 }
 
 function assertSyncConfig(config) {
-  if (!config.url || !config.anonKey || !config.userId || !config.syncSecret) {
-    throw new Error('Supabase URL / Anon Key / Sync User ID / Sync Secret をすべて入力してください');
+  if (!config.url || !config.anonKey) {
+    throw new Error('Supabase URL / Anon Key を入力してください');
   }
 }
 
+function currentSyncConfig() {
+  return {
+    ...SUPABASE_DEFAULT_CONFIG,
+    ...loadSyncConfig(),
+    ...getSyncConfigFromInputs(),
+  };
+}
+
+async function getSupabaseClient(config) {
+  assertSyncConfig(config);
+  const configKey = JSON.stringify({ url: config.url, anonKey: config.anonKey });
+  if (!supabaseClientPromise || supabaseClientConfigKey !== configKey) {
+    supabaseClientPromise = import('https://esm.sh/@supabase/supabase-js@2').then(({ createClient }) => createClient(
+      config.url,
+      config.anonKey,
+      {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      },
+    ));
+    supabaseClientConfigKey = configKey;
+  }
+
+  return supabaseClientPromise;
+}
+
+function renderAuthStatus() {
+  if (!el.supabaseAuthStatus) return;
+
+  el.supabaseAuthStatus.value = state.supabaseSession?.user?.email
+    ? `ログイン中: ${state.supabaseSession.user.email}`
+    : '未ログイン';
+
+  if (el.supabaseLogoutButton) {
+    el.supabaseLogoutButton.disabled = !state.supabaseSession;
+  }
+}
+
+async function refreshSupabaseSession() {
+  const config = currentSyncConfig();
+  if (!config.url || !config.anonKey) {
+    state.supabaseSession = null;
+    renderAuthStatus();
+    return null;
+  }
+
+  const client = await getSupabaseClient(config);
+  const { data, error } = await client.auth.getSession();
+  if (error) throw error;
+  state.supabaseSession = data.session || null;
+  renderAuthStatus();
+  return state.supabaseSession;
+}
+
+async function requireSupabaseSession(config) {
+  const session = await refreshSupabaseSession();
+  if (!session?.access_token || !session?.user?.id) {
+    throw new Error('先に Supabase Auth でログインしてください');
+  }
+  return session;
+}
+
+async function sendSupabaseLoginLink() {
+  const config = currentSyncConfig();
+  assertSyncConfig(config);
+  if (!config.authEmail) {
+    throw new Error('ログイン用メールアドレスを入力してください');
+  }
+
+  saveSyncConfig(config);
+  const client = await getSupabaseClient(config);
+  const { error } = await client.auth.signInWithOtp({
+    email: config.authEmail,
+    options: {
+      emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+    },
+  });
+  if (error) throw error;
+}
+
+async function signOutSupabase() {
+  const config = currentSyncConfig();
+  assertSyncConfig(config);
+  const client = await getSupabaseClient(config);
+  const { error } = await client.auth.signOut();
+  if (error) throw error;
+  state.supabaseSession = null;
+  renderAuthStatus();
+}
+
 async function supabaseRequest(config, path, options = {}) {
-  const syncSecretHash = await sha256Hex(config.syncSecret);
+  const session = await requireSupabaseSession(config);
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     ...options,
     headers: {
       apikey: config.anonKey,
-      Authorization: `Bearer ${config.anonKey}`,
+      Authorization: `Bearer ${session.access_token}`,
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
-      'x-sync-user-id': config.userId,
-      'x-sync-secret-hash': syncSecretHash,
       ...(options.headers || {}),
     },
   });
@@ -594,22 +687,25 @@ async function supabaseRequest(config, path, options = {}) {
 }
 
 async function pushToSupabase() {
-  const config = getSyncConfigFromInputs();
+  const config = currentSyncConfig();
   return pushStateToSupabase(config, state.matches);
 }
 
 async function pushStateToSupabase(config, matchesToPush) {
   assertSyncConfig(config);
   saveSyncConfig(config);
-  const syncSecretHash = await sha256Hex(config.syncSecret);
+  const session = await requireSupabaseSession(config);
 
   await supabaseRequest(config, 'users', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify([{ id: config.userId, sync_secret_hash: syncSecretHash }]),
+    body: JSON.stringify([{
+      id: session.user.id,
+      display_name: session.user.email || null,
+    }]),
   });
 
-  const matchRows = matchesToPush.map((match) => toSupabaseMatch(match, config.userId));
+  const matchRows = matchesToPush.map((match) => toSupabaseMatch(match, session.user.id));
   if (matchRows.length) {
     await supabaseRequest(config, 'matches', {
       method: 'POST',
@@ -646,10 +742,11 @@ async function pushStateToSupabase(config, matchesToPush) {
 async function fetchSupabaseMatches(config) {
   assertSyncConfig(config);
   saveSyncConfig(config);
+  const session = await requireSupabaseSession(config);
 
   const matches = await supabaseRequest(
     config,
-    `matches?user_id=eq.${encodeURIComponent(config.userId)}&order=match_date.desc`,
+    `matches?user_id=eq.${encodeURIComponent(session.user.id)}&order=match_date.desc`,
     { method: 'GET' },
   );
 
@@ -712,7 +809,7 @@ async function fetchSupabaseMatches(config) {
 }
 
 async function pullFromSupabase() {
-  const config = getSyncConfigFromInputs();
+  const config = currentSyncConfig();
   const remoteMatches = await fetchSupabaseMatches(config);
   state.matches = remoteMatches;
   state.selectedMatchId = state.matches[0]?.id || null;
@@ -721,7 +818,7 @@ async function pullFromSupabase() {
 }
 
 async function syncWithSupabase() {
-  const config = getSyncConfigFromInputs();
+  const config = currentSyncConfig();
   assertSyncConfig(config);
   saveSyncConfig(config);
 
@@ -1488,8 +1585,8 @@ if (el.importJsonFile) {
 
 if (el.saveSyncConfigButton) {
   el.saveSyncConfigButton.addEventListener('click', () => {
-    saveSyncConfig(getSyncConfigFromInputs());
-    setFeedback('Supabase 同期設定を保存しました', 'success');
+    saveSyncConfig(currentSyncConfig());
+    setFeedback('Supabase 設定を保存しました', 'success');
   });
 }
 
@@ -1500,6 +1597,28 @@ if (el.syncSupabaseButton) {
       setFeedback(`Supabase と同期しました (${result.matchCount}試合 / ${result.pointCount}ポイント)`, 'success');
     } catch (error) {
       setFeedback(`Supabase 同期に失敗しました: ${error.message}`, 'error');
+    }
+  });
+}
+
+if (el.supabaseLoginButton) {
+  el.supabaseLoginButton.addEventListener('click', async () => {
+    try {
+      await sendSupabaseLoginLink();
+      setFeedback('ログインリンクを送信しました。メールを開いてこの画面に戻ってください。', 'success');
+    } catch (error) {
+      setFeedback(`ログインリンク送信に失敗しました: ${error.message}`, 'error');
+    }
+  });
+}
+
+if (el.supabaseLogoutButton) {
+  el.supabaseLogoutButton.addEventListener('click', async () => {
+    try {
+      await signOutSupabase();
+      setFeedback('Supabase からログアウトしました', 'success');
+    } catch (error) {
+      setFeedback(`ログアウトに失敗しました: ${error.message}`, 'error');
     }
   });
 }
@@ -1528,6 +1647,9 @@ if (el.pullSupabaseButton) {
 
 loadState();
 renderSyncConfig();
+refreshSupabaseSession().catch((error) => {
+  setFeedback(`Supabase セッション確認に失敗しました: ${error.message}`, 'error');
+});
 if (el.courtBoard) {
   renderCourtBoard();
 }

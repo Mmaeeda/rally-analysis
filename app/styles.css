@@ -77,8 +77,8 @@ header p {
 #analysis-export,
 #supabase-anon-key,
 #supabase-url,
-#supabase-user-id,
-#supabase-sync-secret {
+#supabase-auth-email,
+#supabase-auth-status {
   width: 100%;
   box-sizing: border-box;
 }

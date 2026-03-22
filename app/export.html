@@ -48,20 +48,22 @@
               </label>
             </div>
             <div class="inline">
-              <label>Sync User ID
-                <input id="supabase-user-id" placeholder="UUID を入力" />
+              <label>ログイン用メール
+                <input id="supabase-auth-email" type="email" placeholder="your@email.com" />
               </label>
-              <label>Sync Secret
-                <input id="supabase-sync-secret" type="password" placeholder="同期用の秘密文字列" />
+              <label>認証状態
+                <input id="supabase-auth-status" readonly placeholder="未ログイン" />
               </label>
             </div>
             <div class="inline">
               <button type="button" id="sync-supabase-button" class="sync-button">同期する</button>
+              <button type="button" id="supabase-login-button" class="secondary-button">ログインリンクを送る</button>
+              <button type="button" id="supabase-logout-button" class="secondary-button">ログアウト</button>
               <button type="button" id="save-sync-config-button" class="secondary-button">同期設定を保存</button>
               <button type="button" id="push-supabase-button">ローカル内容を Supabase に送る</button>
               <button type="button" id="pull-supabase-button" class="secondary-button">Supabase から読み込む</button>
             </div>
-            <p class="muted">`db/schema.sql` を実行した後に `db/rls.sql` も実行してください。ブラウザは `Sync User ID` と `Sync Secret` から同期権限を判定します。</p>
+            <p class="muted">`db/schema.sql` の後に `db/rls.sql` を実行してください。公開アプリでは `Supabase Auth` のログインセッションを使って同期権限を判定します。</p>
           </div>
 
           <h3>分析用文字列出力</h3>

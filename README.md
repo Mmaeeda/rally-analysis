@@ -55,13 +55,14 @@ npm test
 - `AI JSONL` は 1 行 1 レコードで、試合サマリー行とポイント行を出力します
 - `AI CSV` は 1 打球 1 行の詳細形式です
 - 通常の Supabase 運用は `同期する` ボタン 1 つで、取得と保存をまとめて実行できます
-- Supabase 同期は `Supabase URL`、`Anon Key`、`Sync User ID`、`Sync Secret` を入れて `push / pull` します
+- Supabase 同期は `Supabase URL`、`Anon Key` を設定し、`ログインリンクを送る` で認証してから `同期する` を使います
+- `app/supabase-config.js` に `Supabase URL` と `Anon Key` を入れておくと、入力欄へ自動反映されます
 
 注意:
 
 - Supabase では `db/schema.sql` 実行後に `db/rls.sql` も実行してください
-- RLS は `x-sync-user-id` と `x-sync-secret-hash` ヘッダーで同期対象を絞る構成です
-- ブラウザ直結方式なので、本格運用では将来的に Supabase Auth 連携へ寄せるのが安全です
+- RLS は `auth.uid()` ベースで、自分のデータだけを read / write できる構成です
+- `Supabase URL` と `Anon Key` は公開可能な設定値として扱い、秘密情報はブラウザに持たせません
 - `db/schema.sql` は現在の 18 面コートと同期項目に合わせて更新しています
 
 ## 主要ファイル
@@ -75,3 +76,4 @@ npm test
 - `src/domain/validation.js`: 入力バリデーション
 - `db/schema.sql`: 将来Supabase連携向けDB定義
 - `db/rls.sql`: Supabase RLS / policy 定義
+- `app/supabase-config.js`: 公開可能な Supabase 接続設定
