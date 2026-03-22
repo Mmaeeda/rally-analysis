@@ -79,6 +79,7 @@ const el = {
   analysisSummary: document.getElementById('analysis-summary'),
   pointList: document.getElementById('point-list'),
   analysis: document.getElementById('analysis'),
+  trajectoryGallery: document.getElementById('trajectory-gallery'),
   buildExportButton: document.getElementById('build-export-button'),
   analysisExport: document.getElementById('analysis-export'),
 };
@@ -155,6 +156,54 @@ function zoneLabel(zoneId) {
   if (!zoneId) return '-';
   const side = zoneId.startsWith('O') ? '相手' : '自陣';
   return `${side}${zoneId.slice(1)}`;
+}
+
+function getZoneCenter(zoneId, width, height) {
+  const zone = COURT_ZONES.find((item) => item.id === zoneId);
+  if (!zone) return null;
+  const index = COURT_ZONES.indexOf(zone);
+  const column = index % 3;
+  const row = Math.floor(index / 3);
+  const cellWidth = width / 3;
+  const cellHeight = height / 6;
+  return {
+    x: (column * cellWidth) + (cellWidth / 2),
+    y: (row * cellHeight) + (cellHeight / 2),
+  };
+}
+
+function buildTrajectorySvg(shots, width = 210, height = 420) {
+  const orderedShots = [...shots].sort((a, b) => a.reverseOrder - b.reverseOrder);
+  const points = orderedShots
+    .map((shot) => getZoneCenter(shot.targetZoneId, width, height))
+    .filter(Boolean);
+
+  const lines = points.slice(0, -1).map((point, index) => {
+    const nextPoint = points[index + 1];
+    return `<line x1="${point.x}" y1="${point.y}" x2="${nextPoint.x}" y2="${nextPoint.y}" stroke="#f8fafc" stroke-width="5" stroke-linecap="round" opacity="0.95" />`;
+  }).join('');
+
+  const ball = points[0]
+    ? `<circle cx="${points[0].x}" cy="${points[0].y}" r="11" fill="#fff7ed" stroke="#c2410c" stroke-width="4" />`
+    : '';
+
+  return `
+    <svg viewBox="0 0 ${width} ${height}" class="mini-court-svg" aria-hidden="true">
+      <rect x="1" y="1" width="${width - 2}" height="${height - 2}" rx="20" fill="#276749" stroke="#16324f" stroke-width="2" />
+      <rect x="0" y="${height / 2 - 3}" width="${width}" height="6" fill="rgba(248,250,252,0.98)" />
+      <line x1="${width / 3}" y1="0" x2="${width / 3}" y2="${height}" stroke="rgba(255,255,255,0.22)" stroke-width="2" />
+      <line x1="${(width / 3) * 2}" y1="0" x2="${(width / 3) * 2}" y2="${height}" stroke="rgba(255,255,255,0.22)" stroke-width="2" />
+      <line x1="0" y1="${height / 6}" x2="${width}" y2="${height / 6}" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+      <line x1="0" y1="${(height / 6) * 2}" x2="${width}" y2="${(height / 6) * 2}" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+      <line x1="0" y1="${(height / 6) * 4}" x2="${width}" y2="${(height / 6) * 4}" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+      <line x1="0" y1="${(height / 6) * 5}" x2="${width}" y2="${(height / 6) * 5}" stroke="rgba(255,255,255,0.15)" stroke-width="2" />
+      <rect x="4" y="4" width="${width - 8}" height="${height / 2 - 8}" rx="16" fill="rgba(110,231,183,0.14)" />
+      <rect x="4" y="${height / 2 + 4}" width="${width - 8}" height="${height / 2 - 8}" rx="16" fill="rgba(251,191,36,0.14)" />
+      ${lines}
+      ${ball}
+      ${points.map((point, index) => `<circle cx="${point.x}" cy="${point.y}" r="7" fill="${index === 0 ? '#c2410c' : '#16324f'}" />`).join('')}
+    </svg>
+  `;
 }
 
 function inferLastShotHitter(finishType, pointResult) {
@@ -316,6 +365,7 @@ function renderShotComposer() {
   zoneButtons.forEach((button) => {
     button.classList.remove('selected');
     delete button.dataset.shotOrder;
+    delete button.dataset.ball;
   });
 
   state.pointComposer.shots.forEach((shot) => {
@@ -323,6 +373,7 @@ function renderShotComposer() {
     if (!zoneButton) return;
     zoneButton.classList.add('selected');
     zoneButton.dataset.shotOrder = String(shot.reverseOrder);
+    zoneButton.dataset.ball = shot.reverseOrder === 1 ? 'true' : 'false';
   });
 
   renderCourtTrail();
@@ -586,6 +637,18 @@ function renderDetails() {
     </div>
   `;
   el.analysisExport.value = buildMatchExport(match);
+  el.trajectoryGallery.innerHTML = ordered.length
+    ? ordered.map((point) => `
+      <article class="trajectory-card">
+        <div class="trajectory-card-header">
+          <strong>Point ${point.pointNumber}</strong>
+          <span class="tag-pill">${LABELS.pointResult[point.pointResult] || point.pointResult}</span>
+        </div>
+        ${buildTrajectorySvg(point.shots)}
+        <div class="muted">${LABELS.finishType[point.finishType] || point.finishType} / ${point.shots.length}球</div>
+      </article>
+    `).join('')
+    : '<p class="muted">ポイントが入るとここに軌跡プレビューを表示します。</p>';
 
   el.pointList.querySelectorAll('[data-delete-point]').forEach((button) => {
     button.addEventListener('click', () => {

@@ -282,6 +282,19 @@ button:disabled {
   font-weight: 700;
 }
 
+.court-zone[data-ball="true"]::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 3px solid #c2410c;
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.25);
+}
+
 .secondary-button {
   background: transparent;
   color: var(--ink);
@@ -335,6 +348,34 @@ th, td {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 0.8rem;
+}
+
+.trajectory-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.8rem;
+}
+
+.trajectory-card {
+  background: rgba(255, 253, 250, 0.88);
+  border: 1px solid rgba(220, 207, 181, 0.7);
+  border-radius: 16px;
+  padding: 0.8rem;
+}
+
+.trajectory-card-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  align-items: center;
+  margin-bottom: 0.55rem;
+}
+
+.mini-court-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin-bottom: 0.5rem;
 }
 
 .metric-list,
