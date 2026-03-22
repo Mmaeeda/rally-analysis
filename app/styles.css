@@ -77,7 +77,8 @@ header p {
 #analysis-export,
 #supabase-anon-key,
 #supabase-url,
-#supabase-user-id {
+#supabase-user-id,
+#supabase-sync-secret {
   width: 100%;
   box-sizing: border-box;
 }
@@ -140,6 +141,16 @@ button:disabled {
   opacity: 0.55;
   cursor: default;
   transform: none;
+}
+
+.sync-button {
+  min-width: 9rem;
+  background: #16324f;
+  border-color: #16324f;
+}
+
+.sync-button:hover {
+  background: #102437;
 }
 
 .muted {

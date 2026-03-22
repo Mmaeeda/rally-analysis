@@ -94,6 +94,7 @@ const el = {
   saveSyncConfigButton: document.getElementById('save-sync-config-button'),
   pushSupabaseButton: document.getElementById('push-supabase-button'),
   pullSupabaseButton: document.getElementById('pull-supabase-button'),
+  syncSupabaseButton: document.getElementById('sync-supabase-button'),
   supabaseSyncSecret: document.getElementById('supabase-sync-secret'),
   downloadAiJsonlButton: document.getElementById('download-ai-jsonl-button'),
   downloadAiCsvButton: document.getElementById('download-ai-csv-button'),
@@ -489,6 +490,63 @@ function applyImportedSnapshot(snapshot) {
   render();
 }
 
+function cloneMatch(match) {
+  return {
+    ...match,
+    points: Array.isArray(match.points)
+      ? match.points.map((point) => ({
+        ...point,
+        shots: Array.isArray(point.shots) ? point.shots.map((shot) => ({ ...shot })) : [],
+      }))
+      : [],
+  };
+}
+
+function compareIsoDate(a, b) {
+  const aTime = a ? Date.parse(a) : 0;
+  const bTime = b ? Date.parse(b) : 0;
+  return aTime - bTime;
+}
+
+function mergePoints(localPoints = [], remotePoints = [], matchId) {
+  const pointMap = new Map();
+
+  [...localPoints, ...remotePoints].forEach((point) => {
+    const existing = pointMap.get(point.id);
+    const normalized = {
+      ...point,
+      matchId,
+      shots: Array.isArray(point.shots) ? point.shots.map((shot) => ({ ...shot })) : [],
+    };
+    if (!existing || compareIsoDate(existing.updatedAt, normalized.updatedAt) < 0) {
+      pointMap.set(normalized.id, normalized);
+    }
+  });
+
+  return [...pointMap.values()].sort((a, b) => a.pointNumber - b.pointNumber);
+}
+
+function mergeMatches(localMatches = [], remoteMatches = []) {
+  const merged = new Map();
+
+  [...localMatches, ...remoteMatches].forEach((match) => {
+    const existing = merged.get(match.id);
+    const normalized = cloneMatch(match);
+    if (!existing) {
+      merged.set(normalized.id, normalized);
+      return;
+    }
+
+    const latest = compareIsoDate(existing.updatedAt, normalized.updatedAt) < 0 ? normalized : existing;
+    merged.set(latest.id, {
+      ...latest,
+      points: mergePoints(existing.points, normalized.points, latest.id),
+    });
+  });
+
+  return [...merged.values()].sort((a, b) => compareIsoDate(b.matchDate, a.matchDate) || compareIsoDate(b.updatedAt, a.updatedAt));
+}
+
 function getSyncConfigFromInputs() {
   return {
     url: el.supabaseUrl?.value.trim() || '',
@@ -537,6 +595,10 @@ async function supabaseRequest(config, path, options = {}) {
 
 async function pushToSupabase() {
   const config = getSyncConfigFromInputs();
+  return pushStateToSupabase(config, state.matches);
+}
+
+async function pushStateToSupabase(config, matchesToPush) {
   assertSyncConfig(config);
   saveSyncConfig(config);
   const syncSecretHash = await sha256Hex(config.syncSecret);
@@ -547,7 +609,7 @@ async function pushToSupabase() {
     body: JSON.stringify([{ id: config.userId, sync_secret_hash: syncSecretHash }]),
   });
 
-  const matchRows = state.matches.map((match) => toSupabaseMatch(match, config.userId));
+  const matchRows = matchesToPush.map((match) => toSupabaseMatch(match, config.userId));
   if (matchRows.length) {
     await supabaseRequest(config, 'matches', {
       method: 'POST',
@@ -556,7 +618,7 @@ async function pushToSupabase() {
     });
   }
 
-  for (const match of state.matches) {
+  for (const match of matchesToPush) {
     await supabaseRequest(config, `points?match_id=eq.${match.id}`, {
       method: 'DELETE',
       headers: { Prefer: 'return=minimal' },
@@ -581,8 +643,7 @@ async function pushToSupabase() {
   }
 }
 
-async function pullFromSupabase() {
-  const config = getSyncConfigFromInputs();
+async function fetchSupabaseMatches(config) {
   assertSyncConfig(config);
   saveSyncConfig(config);
 
@@ -644,13 +705,45 @@ async function pullFromSupabase() {
     return acc;
   }, {});
 
-  state.matches = matches.map((match) => ({
+  return matches.map((match) => ({
     ...snakeToCamelMatch(match),
     points: pointsByMatchId[match.id] || [],
   }));
+}
+
+async function pullFromSupabase() {
+  const config = getSyncConfigFromInputs();
+  const remoteMatches = await fetchSupabaseMatches(config);
+  state.matches = remoteMatches;
   state.selectedMatchId = state.matches[0]?.id || null;
   saveState();
   render();
+}
+
+async function syncWithSupabase() {
+  const config = getSyncConfigFromInputs();
+  assertSyncConfig(config);
+  saveSyncConfig(config);
+
+  const remoteMatches = await fetchSupabaseMatches(config);
+  const mergedMatches = mergeMatches(state.matches, remoteMatches);
+  const preferredSelectedMatchId = state.selectedMatchId
+    || remoteMatches[0]?.id
+    || mergedMatches[0]?.id
+    || null;
+
+  state.matches = mergedMatches;
+  state.selectedMatchId = mergedMatches.some((match) => match.id === preferredSelectedMatchId)
+    ? preferredSelectedMatchId
+    : (mergedMatches[0]?.id || null);
+  saveState();
+  render();
+
+  await pushStateToSupabase(config, mergedMatches);
+  return {
+    matchCount: mergedMatches.length,
+    pointCount: mergedMatches.reduce((sum, match) => sum + match.points.length, 0),
+  };
 }
 
 function getZoneCenter(zoneId, width, height) {
@@ -1397,6 +1490,17 @@ if (el.saveSyncConfigButton) {
   el.saveSyncConfigButton.addEventListener('click', () => {
     saveSyncConfig(getSyncConfigFromInputs());
     setFeedback('Supabase 同期設定を保存しました', 'success');
+  });
+}
+
+if (el.syncSupabaseButton) {
+  el.syncSupabaseButton.addEventListener('click', async () => {
+    try {
+      const result = await syncWithSupabase();
+      setFeedback(`Supabase と同期しました (${result.matchCount}試合 / ${result.pointCount}ポイント)`, 'success');
+    } catch (error) {
+      setFeedback(`Supabase 同期に失敗しました: ${error.message}`, 'error');
+    }
   });
 }
 

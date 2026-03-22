@@ -54,6 +54,7 @@ npm test
 - `CSV` はポイント単位のフラット形式で書き出します
 - `AI JSONL` は 1 行 1 レコードで、試合サマリー行とポイント行を出力します
 - `AI CSV` は 1 打球 1 行の詳細形式です
+- 通常の Supabase 運用は `同期する` ボタン 1 つで、取得と保存をまとめて実行できます
 - Supabase 同期は `Supabase URL`、`Anon Key`、`Sync User ID`、`Sync Secret` を入れて `push / pull` します
 
 注意:
