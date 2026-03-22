@@ -45,6 +45,7 @@ const LABELS = {
     long: '長い',
   },
 };
+const AI_EXPORT_VERSION = 1;
 
 const state = {
   matches: [],
@@ -93,6 +94,9 @@ const el = {
   saveSyncConfigButton: document.getElementById('save-sync-config-button'),
   pushSupabaseButton: document.getElementById('push-supabase-button'),
   pullSupabaseButton: document.getElementById('pull-supabase-button'),
+  supabaseSyncSecret: document.getElementById('supabase-sync-secret'),
+  downloadAiJsonlButton: document.getElementById('download-ai-jsonl-button'),
+  downloadAiCsvButton: document.getElementById('download-ai-csv-button'),
 };
 
 const currentPage = document.body?.dataset.page || 'unknown';
@@ -131,6 +135,12 @@ function loadSyncConfig() {
 
 function saveSyncConfig(config) {
   localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
+}
+
+async function sha256Hex(value) {
+  const encoded = new TextEncoder().encode(value);
+  const buffer = await crypto.subtle.digest('SHA-256', encoded);
+  return [...new Uint8Array(buffer)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function replaceInputUrlWithoutEdit() {
@@ -326,6 +336,147 @@ function buildCsvExport() {
     .join('\n');
 }
 
+function buildAiCsvExport() {
+  const rows = [[
+    'match_id',
+    'match_title',
+    'match_date',
+    'opponent_name',
+    'point_id',
+    'point_number',
+    'point_result',
+    'finish_type',
+    'server_side',
+    'pressure_level',
+    'rally_length_category',
+    'my_score_after',
+    'opponent_score_after',
+    'shot_reverse_order',
+    'shot_hitter_side',
+    'shot_target_zone_id',
+    'shot_note',
+    'memo',
+  ]];
+
+  state.matches.forEach((match) => {
+    match.points.forEach((point) => {
+      const shots = [...point.shots].sort((a, b) => a.reverseOrder - b.reverseOrder);
+      if (!shots.length) {
+        rows.push([
+          match.id,
+          match.title,
+          match.matchDate,
+          match.opponentName || '',
+          point.id,
+          point.pointNumber,
+          point.pointResult,
+          point.finishType,
+          point.serverSide || '',
+          point.pressureLevel || '',
+          point.rallyLengthCategory || '',
+          point.myScoreAfter ?? '',
+          point.opponentScoreAfter ?? '',
+          '',
+          '',
+          '',
+          '',
+          point.memo || '',
+        ]);
+        return;
+      }
+
+      shots.forEach((shot) => {
+        rows.push([
+          match.id,
+          match.title,
+          match.matchDate,
+          match.opponentName || '',
+          point.id,
+          point.pointNumber,
+          point.pointResult,
+          point.finishType,
+          point.serverSide || '',
+          point.pressureLevel || '',
+          point.rallyLengthCategory || '',
+          point.myScoreAfter ?? '',
+          point.opponentScoreAfter ?? '',
+          shot.reverseOrder,
+          shot.hitterSide,
+          shot.targetZoneId,
+          shot.note || '',
+          point.memo || '',
+        ]);
+      });
+    });
+  });
+
+  return rows
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+}
+
+function buildAiJsonlExport() {
+  const lines = [];
+
+  state.matches.forEach((match) => {
+    const orderedPoints = [...match.points].sort((a, b) => a.pointNumber - b.pointNumber);
+    const analysis = buildMatchAnalysis(orderedPoints);
+    lines.push(JSON.stringify({
+      recordType: 'match_summary',
+      exportVersion: AI_EXPORT_VERSION,
+      match: {
+        id: match.id,
+        title: match.title,
+        opponentName: match.opponentName || '',
+        playerLabel: match.playerLabel || '',
+        focusTheme: match.focusTheme || '',
+        matchDate: match.matchDate,
+        matchType: match.matchType,
+      },
+      analysis: analysis.totals,
+    }));
+
+    orderedPoints.forEach((point) => {
+      lines.push(JSON.stringify({
+        recordType: 'point',
+        exportVersion: AI_EXPORT_VERSION,
+        match: {
+          id: match.id,
+          title: match.title,
+          opponentName: match.opponentName || '',
+          matchDate: match.matchDate,
+          matchType: match.matchType,
+          playerLabel: match.playerLabel || '',
+          focusTheme: match.focusTheme || '',
+        },
+        point: {
+          id: point.id,
+          pointNumber: point.pointNumber,
+          pointResult: point.pointResult,
+          finishType: point.finishType,
+          serverSide: point.serverSide || '',
+          pressureLevel: point.pressureLevel || '',
+          rallyLengthCategory: point.rallyLengthCategory || '',
+          myScoreAfter: point.myScoreAfter ?? null,
+          opponentScoreAfter: point.opponentScoreAfter ?? null,
+          memo: point.memo || '',
+          shots: [...point.shots]
+            .sort((a, b) => a.reverseOrder - b.reverseOrder)
+            .map((shot) => ({
+              reverseOrder: shot.reverseOrder,
+              hitterSide: shot.hitterSide,
+              targetZoneId: shot.targetZoneId,
+              targetZoneLabel: zoneLabel(shot.targetZoneId),
+              note: shot.note || '',
+            })),
+        },
+      }));
+    });
+  });
+
+  return lines.join('\n');
+}
+
 async function readJsonFile(file) {
   const text = await file.text();
   return JSON.parse(text);
@@ -343,6 +494,7 @@ function getSyncConfigFromInputs() {
     url: el.supabaseUrl?.value.trim() || '',
     anonKey: el.supabaseAnonKey?.value.trim() || '',
     userId: el.supabaseUserId?.value.trim() || '',
+    syncSecret: el.supabaseSyncSecret?.value || '',
   };
 }
 
@@ -351,15 +503,17 @@ function renderSyncConfig() {
   if (el.supabaseUrl) el.supabaseUrl.value = config.url || '';
   if (el.supabaseAnonKey) el.supabaseAnonKey.value = config.anonKey || '';
   if (el.supabaseUserId) el.supabaseUserId.value = config.userId || '';
+  if (el.supabaseSyncSecret) el.supabaseSyncSecret.value = config.syncSecret || '';
 }
 
 function assertSyncConfig(config) {
-  if (!config.url || !config.anonKey || !config.userId) {
-    throw new Error('Supabase URL / Anon Key / Sync User ID をすべて入力してください');
+  if (!config.url || !config.anonKey || !config.userId || !config.syncSecret) {
+    throw new Error('Supabase URL / Anon Key / Sync User ID / Sync Secret をすべて入力してください');
   }
 }
 
 async function supabaseRequest(config, path, options = {}) {
+  const syncSecretHash = await sha256Hex(config.syncSecret);
   const response = await fetch(`${config.url}/rest/v1/${path}`, {
     ...options,
     headers: {
@@ -367,6 +521,8 @@ async function supabaseRequest(config, path, options = {}) {
       Authorization: `Bearer ${config.anonKey}`,
       'Content-Type': 'application/json',
       Prefer: 'return=representation',
+      'x-sync-user-id': config.userId,
+      'x-sync-secret-hash': syncSecretHash,
       ...(options.headers || {}),
     },
   });
@@ -383,11 +539,12 @@ async function pushToSupabase() {
   const config = getSyncConfigFromInputs();
   assertSyncConfig(config);
   saveSyncConfig(config);
+  const syncSecretHash = await sha256Hex(config.syncSecret);
 
   await supabaseRequest(config, 'users', {
     method: 'POST',
     headers: { Prefer: 'resolution=merge-duplicates' },
-    body: JSON.stringify([{ id: config.userId }]),
+    body: JSON.stringify([{ id: config.userId, sync_secret_hash: syncSecretHash }]),
   });
 
   const matchRows = state.matches.map((match) => toSupabaseMatch(match, config.userId));
@@ -838,13 +995,18 @@ function buildMatchExport(match) {
   });
 
   return [
+    `ai_export_version: ${AI_EXPORT_VERSION}`,
     `match_title: ${match.title}`,
     `opponent: ${match.opponentName || '-'}`,
     `match_date: ${match.matchDate}`,
     `match_type: ${match.matchType}`,
     `team_label: ${match.playerLabel || '-'}`,
     `focus_theme: ${match.focusTheme || '-'}`,
-    `summary: total_points=${analysis.totals.totalPoints}, win_rate=${analysis.totals.winRate}%, pressure_win_rate=${analysis.totals.pressureWinRate}%`,
+    `summary: total_points=${analysis.totals.totalPoints}, win_rate=${analysis.totals.winRate}%, pressure_win_rate=${analysis.totals.pressureWinRate}%, average_recorded_shots=${analysis.totals.averageRecordedShots}`,
+    'analysis_view:',
+    `server_side=${analysis.byServerSide.map((item) => `${item.key}:${item.won}/${item.total}:${item.winRate}%`).join(' ; ') || '-'}`,
+    `pressure_level=${analysis.byPressureLevel.map((item) => `${item.key}:${item.won}/${item.total}:${item.winRate}%`).join(' ; ') || '-'}`,
+    `rally_length=${analysis.byRallyLength.map((item) => `${item.key}:${item.won}/${item.total}:${item.winRate}%`).join(' ; ') || '-'}`,
     'points:',
     ...pointLines,
   ].join('\n');
@@ -1190,6 +1352,28 @@ if (el.downloadCsvButton) {
       'text/csv;charset=utf-8',
     );
     setFeedback('CSV を書き出しました', 'success');
+  });
+}
+
+if (el.downloadAiJsonlButton) {
+  el.downloadAiJsonlButton.addEventListener('click', () => {
+    triggerDownload(
+      `rally-analysis-ai-${new Date().toISOString().slice(0, 10)}.jsonl`,
+      buildAiJsonlExport(),
+      'application/x-ndjson',
+    );
+    setFeedback('AI 用 JSONL を書き出しました', 'success');
+  });
+}
+
+if (el.downloadAiCsvButton) {
+  el.downloadAiCsvButton.addEventListener('click', () => {
+    triggerDownload(
+      `rally-analysis-ai-${new Date().toISOString().slice(0, 10)}.csv`,
+      buildAiCsvExport(),
+      'text/csv;charset=utf-8',
+    );
+    setFeedback('AI 用 CSV を書き出しました', 'success');
   });
 }
 

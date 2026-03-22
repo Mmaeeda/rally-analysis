@@ -51,18 +51,25 @@
               <label>Sync User ID
                 <input id="supabase-user-id" placeholder="UUID を入力" />
               </label>
+              <label>Sync Secret
+                <input id="supabase-sync-secret" type="password" placeholder="同期用の秘密文字列" />
+              </label>
             </div>
             <div class="inline">
               <button type="button" id="save-sync-config-button" class="secondary-button">同期設定を保存</button>
               <button type="button" id="push-supabase-button">ローカル内容を Supabase に送る</button>
               <button type="button" id="pull-supabase-button" class="secondary-button">Supabase から読み込む</button>
             </div>
-            <p class="muted">現状は認証なしのプロトタイプ同期です。Supabase 側の公開テーブル設定と RLS 方針は README と schema を確認してください。</p>
+            <p class="muted">`db/schema.sql` を実行した後に `db/rls.sql` も実行してください。ブラウザは `Sync User ID` と `Sync Secret` から同期権限を判定します。</p>
           </div>
 
           <h3>分析用文字列出力</h3>
           <div class="stack">
-            <button type="button" class="secondary-button" id="build-export-button">文字列を生成</button>
+            <div class="inline">
+              <button type="button" class="secondary-button" id="build-export-button">AIテキストを生成</button>
+              <button type="button" class="secondary-button" id="download-ai-jsonl-button">AI JSONL</button>
+              <button type="button" class="secondary-button" id="download-ai-csv-button">AI CSV</button>
+            </div>
             <textarea id="analysis-export" rows="18" readonly placeholder="ここに AI に渡すための文字列を生成します"></textarea>
           </div>
         </div>

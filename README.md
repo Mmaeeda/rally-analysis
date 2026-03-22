@@ -18,6 +18,7 @@
 - データのローカル保存（`localStorage`）
 - JSON バックアップ書き出し / 復元
 - CSV 書き出し
+- AI 向け JSONL / 詳細 CSV / 構造化テキスト出力
 - Supabase への push / pull 同期
 
 ## 起動
@@ -51,12 +52,15 @@ npm test
 - `文字列出力` ページから `JSON` バックアップを書き出せます
 - 同ページから `JSON` バックアップの復元ができます
 - `CSV` はポイント単位のフラット形式で書き出します
-- Supabase 同期は `Supabase URL`、`Anon Key`、`Sync User ID` を入れて `push / pull` します
+- `AI JSONL` は 1 行 1 レコードで、試合サマリー行とポイント行を出力します
+- `AI CSV` は 1 打球 1 行の詳細形式です
+- Supabase 同期は `Supabase URL`、`Anon Key`、`Sync User ID`、`Sync Secret` を入れて `push / pull` します
 
 注意:
 
-- 現状の Supabase 同期はプロトタイプ用途です
-- ブラウザから直接 REST API を叩く方式なので、公開運用前に認証/RLS 方針を決めてください
+- Supabase では `db/schema.sql` 実行後に `db/rls.sql` も実行してください
+- RLS は `x-sync-user-id` と `x-sync-secret-hash` ヘッダーで同期対象を絞る構成です
+- ブラウザ直結方式なので、本格運用では将来的に Supabase Auth 連携へ寄せるのが安全です
 - `db/schema.sql` は現在の 18 面コートと同期項目に合わせて更新しています
 
 ## 主要ファイル
@@ -69,3 +73,4 @@ npm test
 - `src/domain/analysis.js`: 集計ロジック
 - `src/domain/validation.js`: 入力バリデーション
 - `db/schema.sql`: 将来Supabase連携向けDB定義
+- `db/rls.sql`: Supabase RLS / policy 定義
