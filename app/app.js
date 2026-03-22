@@ -2,6 +2,7 @@ import { validatePointInputDraft } from '../src/domain/validation.js';
 import { buildMatchAnalysis } from '../src/domain/analysis.js';
 
 const STORAGE_KEY = 'rally-analysis-v1';
+const SYNC_CONFIG_KEY = 'rally-analysis-sync-config-v1';
 const COURT_ZONES = [
   { id: 'O1', courtSide: 'opponent', label: '1' },
   { id: 'O2', courtSide: 'opponent', label: '2' },
@@ -82,6 +83,16 @@ const el = {
   trajectoryGallery: document.getElementById('trajectory-gallery'),
   buildExportButton: document.getElementById('build-export-button'),
   analysisExport: document.getElementById('analysis-export'),
+  storageFeedback: document.getElementById('storage-feedback'),
+  downloadJsonButton: document.getElementById('download-json-button'),
+  downloadCsvButton: document.getElementById('download-csv-button'),
+  importJsonFile: document.getElementById('import-json-file'),
+  supabaseUrl: document.getElementById('supabase-url'),
+  supabaseAnonKey: document.getElementById('supabase-anon-key'),
+  supabaseUserId: document.getElementById('supabase-user-id'),
+  saveSyncConfigButton: document.getElementById('save-sync-config-button'),
+  pushSupabaseButton: document.getElementById('push-supabase-button'),
+  pullSupabaseButton: document.getElementById('pull-supabase-button'),
 };
 
 const currentPage = document.body?.dataset.page || 'unknown';
@@ -110,6 +121,18 @@ function saveState() {
   }));
 }
 
+function loadSyncConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(SYNC_CONFIG_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveSyncConfig(config) {
+  localStorage.setItem(SYNC_CONFIG_KEY, JSON.stringify(config));
+}
+
 function replaceInputUrlWithoutEdit() {
   if (currentPage !== 'input') return;
   window.history.replaceState({}, '', './input.html');
@@ -120,8 +143,10 @@ function selectedMatch() {
 }
 
 function setFeedback(message, type = '') {
-  el.pointFeedback.textContent = message;
-  el.pointFeedback.className = `feedback${type ? ` ${type}` : ''}`;
+  const target = el.pointFeedback || el.storageFeedback;
+  if (!target) return;
+  target.textContent = message;
+  target.className = `feedback${type ? ` ${type}` : ''}`;
 }
 
 function renderTagRows(entries, emptyLabel = 'データなし') {
@@ -168,6 +193,307 @@ function zoneLabel(zoneId) {
 function courtSideFromZoneId(zoneId) {
   if (!zoneId) return undefined;
   return zoneId.startsWith('O') ? 'opponent' : 'me';
+}
+
+function snakeToCamelMatch(match) {
+  return {
+    id: match.id,
+    title: match.title,
+    opponentName: match.opponent_name || '',
+    playerLabel: match.player_label || '',
+    focusTheme: match.focus_theme || '',
+    matchDate: match.match_date,
+    matchType: match.match_type,
+    points: [],
+    createdAt: match.created_at,
+    updatedAt: match.updated_at,
+  };
+}
+
+function toSupabaseMatch(match, userId) {
+  return {
+    id: match.id,
+    user_id: userId,
+    title: match.title,
+    opponent_name: match.opponentName || null,
+    player_label: match.playerLabel || null,
+    focus_theme: match.focusTheme || null,
+    match_date: match.matchDate,
+    match_type: match.matchType,
+    created_at: match.createdAt,
+    updated_at: match.updatedAt,
+  };
+}
+
+function toSupabasePoint(point) {
+  return {
+    id: point.id,
+    match_id: point.matchId,
+    point_number: point.pointNumber,
+    my_score_after: point.myScoreAfter ?? null,
+    opponent_score_after: point.opponentScoreAfter ?? null,
+    point_result: point.pointResult,
+    finish_type: point.finishType,
+    server_side: point.serverSide,
+    pressure_level: point.pressureLevel,
+    rally_length_category: point.rallyLengthCategory,
+    memo: point.memo || null,
+    created_at: point.createdAt,
+    updated_at: point.updatedAt,
+  };
+}
+
+function toSupabaseShot(pointId, shot) {
+  return {
+    id: `${pointId}-${shot.reverseOrder}`,
+    point_id: pointId,
+    reverse_order: shot.reverseOrder,
+    hitter_side: shot.hitterSide,
+    target_zone_id: shot.targetZoneId,
+    note: shot.note || null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function buildBackupSnapshot() {
+  return {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    selectedMatchId: state.selectedMatchId,
+    matches: state.matches,
+  };
+}
+
+function triggerDownload(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildCsvExport() {
+  const rows = [[
+    'match_id',
+    'match_title',
+    'match_date',
+    'opponent_name',
+    'point_id',
+    'point_number',
+    'point_result',
+    'finish_type',
+    'server_side',
+    'pressure_level',
+    'rally_length_category',
+    'my_score_after',
+    'opponent_score_after',
+    'memo',
+    'shots',
+  ]];
+
+  state.matches.forEach((match) => {
+    match.points.forEach((point) => {
+      const shots = [...point.shots]
+        .sort((a, b) => a.reverseOrder - b.reverseOrder)
+        .map((shot) => `Shot${shot.reverseOrder}:${shot.hitterSide}:${shot.targetZoneId}`)
+        .join(' | ');
+
+      rows.push([
+        match.id,
+        match.title,
+        match.matchDate,
+        match.opponentName || '',
+        point.id,
+        point.pointNumber,
+        point.pointResult,
+        point.finishType,
+        point.serverSide || '',
+        point.pressureLevel || '',
+        point.rallyLengthCategory || '',
+        point.myScoreAfter ?? '',
+        point.opponentScoreAfter ?? '',
+        point.memo || '',
+        shots,
+      ]);
+    });
+  });
+
+  return rows
+    .map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(','))
+    .join('\n');
+}
+
+async function readJsonFile(file) {
+  const text = await file.text();
+  return JSON.parse(text);
+}
+
+function applyImportedSnapshot(snapshot) {
+  state.matches = Array.isArray(snapshot.matches) ? snapshot.matches : [];
+  state.selectedMatchId = snapshot.selectedMatchId || state.matches[0]?.id || null;
+  saveState();
+  render();
+}
+
+function getSyncConfigFromInputs() {
+  return {
+    url: el.supabaseUrl?.value.trim() || '',
+    anonKey: el.supabaseAnonKey?.value.trim() || '',
+    userId: el.supabaseUserId?.value.trim() || '',
+  };
+}
+
+function renderSyncConfig() {
+  const config = loadSyncConfig();
+  if (el.supabaseUrl) el.supabaseUrl.value = config.url || '';
+  if (el.supabaseAnonKey) el.supabaseAnonKey.value = config.anonKey || '';
+  if (el.supabaseUserId) el.supabaseUserId.value = config.userId || '';
+}
+
+function assertSyncConfig(config) {
+  if (!config.url || !config.anonKey || !config.userId) {
+    throw new Error('Supabase URL / Anon Key / Sync User ID をすべて入力してください');
+  }
+}
+
+async function supabaseRequest(config, path, options = {}) {
+  const response = await fetch(`${config.url}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${config.anonKey}`,
+      'Content-Type': 'application/json',
+      Prefer: 'return=representation',
+      ...(options.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(await response.text());
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function pushToSupabase() {
+  const config = getSyncConfigFromInputs();
+  assertSyncConfig(config);
+  saveSyncConfig(config);
+
+  await supabaseRequest(config, 'users', {
+    method: 'POST',
+    headers: { Prefer: 'resolution=merge-duplicates' },
+    body: JSON.stringify([{ id: config.userId }]),
+  });
+
+  const matchRows = state.matches.map((match) => toSupabaseMatch(match, config.userId));
+  if (matchRows.length) {
+    await supabaseRequest(config, 'matches', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(matchRows),
+    });
+  }
+
+  for (const match of state.matches) {
+    await supabaseRequest(config, `points?match_id=eq.${match.id}`, {
+      method: 'DELETE',
+      headers: { Prefer: 'return=minimal' },
+    });
+
+    if (!match.points.length) continue;
+
+    await supabaseRequest(config, 'points', {
+      method: 'POST',
+      headers: { Prefer: 'resolution=merge-duplicates' },
+      body: JSON.stringify(match.points.map((point) => toSupabasePoint(point))),
+    });
+
+    const shotRows = match.points.flatMap((point) => point.shots.map((shot) => toSupabaseShot(point.id, shot)));
+    if (shotRows.length) {
+      await supabaseRequest(config, 'point_shots', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates' },
+        body: JSON.stringify(shotRows),
+      });
+    }
+  }
+}
+
+async function pullFromSupabase() {
+  const config = getSyncConfigFromInputs();
+  assertSyncConfig(config);
+  saveSyncConfig(config);
+
+  const matches = await supabaseRequest(
+    config,
+    `matches?user_id=eq.${encodeURIComponent(config.userId)}&order=match_date.desc`,
+    { method: 'GET' },
+  );
+
+  if (!matches.length) {
+    state.matches = [];
+    state.selectedMatchId = null;
+    saveState();
+    render();
+    return;
+  }
+
+  const matchIds = matches.map((match) => match.id);
+  const points = await supabaseRequest(
+    config,
+    `points?match_id=in.(${matchIds.join(',')})&order=point_number.asc`,
+    { method: 'GET' },
+  );
+
+  const pointIds = points.map((point) => point.id);
+  const shots = pointIds.length
+    ? await supabaseRequest(config, `point_shots?point_id=in.(${pointIds.join(',')})&order=reverse_order.asc`, { method: 'GET' })
+    : [];
+
+  const shotsByPointId = shots.reduce((acc, shot) => {
+    acc[shot.point_id] = acc[shot.point_id] || [];
+    acc[shot.point_id].push({
+      reverseOrder: shot.reverse_order,
+      hitterSide: shot.hitter_side,
+      targetZoneId: shot.target_zone_id,
+      note: shot.note || undefined,
+    });
+    return acc;
+  }, {});
+
+  const pointsByMatchId = points.reduce((acc, point) => {
+    acc[point.match_id] = acc[point.match_id] || [];
+    acc[point.match_id].push({
+      id: point.id,
+      matchId: point.match_id,
+      pointNumber: point.point_number,
+      myScoreAfter: point.my_score_after ?? undefined,
+      opponentScoreAfter: point.opponent_score_after ?? undefined,
+      pointResult: point.point_result,
+      finishType: point.finish_type,
+      serverSide: point.server_side || undefined,
+      pressureLevel: point.pressure_level || undefined,
+      rallyLengthCategory: point.rally_length_category || undefined,
+      memo: point.memo || undefined,
+      shots: shotsByPointId[point.id] || [],
+      createdAt: point.created_at,
+      updatedAt: point.updated_at,
+    });
+    return acc;
+  }, {});
+
+  state.matches = matches.map((match) => ({
+    ...snakeToCamelMatch(match),
+    points: pointsByMatchId[match.id] || [],
+  }));
+  state.selectedMatchId = state.matches[0]?.id || null;
+  saveState();
+  render();
 }
 
 function getZoneCenter(zoneId, width, height) {
@@ -845,7 +1171,75 @@ if (el.buildExportButton) {
   });
 }
 
+if (el.downloadJsonButton) {
+  el.downloadJsonButton.addEventListener('click', () => {
+    triggerDownload(
+      `rally-analysis-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      JSON.stringify(buildBackupSnapshot(), null, 2),
+      'application/json',
+    );
+    setFeedback('JSON バックアップを書き出しました', 'success');
+  });
+}
+
+if (el.downloadCsvButton) {
+  el.downloadCsvButton.addEventListener('click', () => {
+    triggerDownload(
+      `rally-analysis-backup-${new Date().toISOString().slice(0, 10)}.csv`,
+      buildCsvExport(),
+      'text/csv;charset=utf-8',
+    );
+    setFeedback('CSV を書き出しました', 'success');
+  });
+}
+
+if (el.importJsonFile) {
+  el.importJsonFile.addEventListener('change', async () => {
+    const file = el.importJsonFile.files?.[0];
+    if (!file) return;
+    try {
+      const snapshot = await readJsonFile(file);
+      applyImportedSnapshot(snapshot);
+      setFeedback('JSON バックアップを読み込みました', 'success');
+    } catch (error) {
+      setFeedback(`JSON 読み込みに失敗しました: ${error.message}`, 'error');
+    } finally {
+      el.importJsonFile.value = '';
+    }
+  });
+}
+
+if (el.saveSyncConfigButton) {
+  el.saveSyncConfigButton.addEventListener('click', () => {
+    saveSyncConfig(getSyncConfigFromInputs());
+    setFeedback('Supabase 同期設定を保存しました', 'success');
+  });
+}
+
+if (el.pushSupabaseButton) {
+  el.pushSupabaseButton.addEventListener('click', async () => {
+    try {
+      await pushToSupabase();
+      setFeedback('ローカルデータを Supabase に送信しました', 'success');
+    } catch (error) {
+      setFeedback(`Supabase 送信に失敗しました: ${error.message}`, 'error');
+    }
+  });
+}
+
+if (el.pullSupabaseButton) {
+  el.pullSupabaseButton.addEventListener('click', async () => {
+    try {
+      await pullFromSupabase();
+      setFeedback('Supabase からデータを読み込みました', 'success');
+    } catch (error) {
+      setFeedback(`Supabase 読み込みに失敗しました: ${error.message}`, 'error');
+    }
+  });
+}
+
 loadState();
+renderSyncConfig();
 if (el.courtBoard) {
   renderCourtBoard();
 }

@@ -74,6 +74,14 @@ header p {
   padding: 1.1rem;
 }
 
+#analysis-export,
+#supabase-anon-key,
+#supabase-url,
+#supabase-user-id {
+  width: 100%;
+  box-sizing: border-box;
+}
+
 #point-input-panel {
   grid-column: span 2;
 }

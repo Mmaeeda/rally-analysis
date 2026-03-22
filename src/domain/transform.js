@@ -9,7 +9,8 @@ export function toPointInsert(draft) {
     point_result: draft.pointResult,
     finish_type: draft.finishType,
     server_side: draft.serverSide,
-    receiver_side: draft.receiverSide,
+    pressure_level: draft.pressureLevel,
+    rally_length_category: draft.rallyLengthCategory,
     memo: draft.memo?.trim() || null,
   };
 }

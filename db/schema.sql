@@ -6,7 +6,12 @@ create type point_result as enum ('won', 'lost');
 create type finish_type as enum ('my_winner', 'opp_winner', 'my_error', 'opp_error', 'other');
 create type side_type as enum ('me', 'opponent');
 create type server_side_type as enum ('me', 'opponent', 'unknown');
-create type zone_id as enum ('Z1', 'Z2', 'Z3', 'Z4', 'Z5', 'Z6', 'Z7', 'Z8', 'Z9');
+create type pressure_level_type as enum ('normal', 'important', 'game_point', 'opponent_game_point');
+create type rally_length_category_type as enum ('short', 'medium', 'long');
+create type zone_id as enum (
+  'O1', 'O2', 'O3', 'O4', 'O5', 'O6', 'O7', 'O8', 'O9',
+  'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7', 'M8', 'M9'
+);
 
 create table users (
   id uuid primary key,
@@ -21,10 +26,8 @@ create table matches (
   opponent_name text,
   match_date date not null,
   match_type match_type not null,
-  my_team_name text,
-  opponent_team_name text,
-  location text,
-  notes text,
+  player_label text,
+  focus_theme text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -38,7 +41,8 @@ create table points (
   point_result point_result not null,
   finish_type finish_type not null,
   server_side server_side_type,
-  receiver_side server_side_type,
+  pressure_level pressure_level_type,
+  rally_length_category rally_length_category_type,
   memo text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -80,3 +84,5 @@ for each row execute function set_updated_at();
 create trigger trg_point_shots_updated_at
 before update on point_shots
 for each row execute function set_updated_at();
+
+comment on table matches is 'Prototype sync table. Define explicit auth/RLS before production exposure.';

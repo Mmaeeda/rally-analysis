@@ -16,6 +16,9 @@
   - 得点/失点時の決まり方、最終打球ゾーン
 - ポイント削除
 - データのローカル保存（`localStorage`）
+- JSON バックアップ書き出し / 復元
+- CSV 書き出し
+- Supabase への push / pull 同期
 
 ## 起動
 
@@ -42,6 +45,19 @@ https://Mmaeeda.github.io/rally-analysis/
 ```bash
 npm test
 ```
+
+## バックアップ / 同期
+
+- `文字列出力` ページから `JSON` バックアップを書き出せます
+- 同ページから `JSON` バックアップの復元ができます
+- `CSV` はポイント単位のフラット形式で書き出します
+- Supabase 同期は `Supabase URL`、`Anon Key`、`Sync User ID` を入れて `push / pull` します
+
+注意:
+
+- 現状の Supabase 同期はプロトタイプ用途です
+- ブラウザから直接 REST API を叩く方式なので、公開運用前に認証/RLS 方針を決めてください
+- `db/schema.sql` は現在の 18 面コートと同期項目に合わせて更新しています
 
 ## 主要ファイル
 

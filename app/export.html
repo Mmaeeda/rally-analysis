@@ -21,9 +21,46 @@
 
     <main class="single-layout">
       <section class="panel">
-        <h2>分析用文字列出力</h2>
+        <h2>保存 / 出力 / 同期</h2>
         <div id="detail-empty" class="muted">試合を選択すると表示されます</div>
         <div id="detail-content" class="hidden">
+          <div id="storage-feedback" class="feedback" aria-live="polite"></div>
+
+          <h3>バックアップ</h3>
+          <div class="stack">
+            <div class="inline">
+              <button type="button" id="download-json-button">JSONを書き出す</button>
+              <button type="button" class="secondary-button" id="download-csv-button">CSVを書き出す</button>
+            </div>
+            <label>JSONバックアップを復元
+              <input type="file" id="import-json-file" accept=".json,application/json" />
+            </label>
+          </div>
+
+          <h3>Supabase 同期</h3>
+          <div class="stack">
+            <div class="inline">
+              <label>Supabase URL
+                <input id="supabase-url" placeholder="https://xxxx.supabase.co" />
+              </label>
+              <label>Anon Key
+                <input id="supabase-anon-key" placeholder="eyJ..." />
+              </label>
+            </div>
+            <div class="inline">
+              <label>Sync User ID
+                <input id="supabase-user-id" placeholder="UUID を入力" />
+              </label>
+            </div>
+            <div class="inline">
+              <button type="button" id="save-sync-config-button" class="secondary-button">同期設定を保存</button>
+              <button type="button" id="push-supabase-button">ローカル内容を Supabase に送る</button>
+              <button type="button" id="pull-supabase-button" class="secondary-button">Supabase から読み込む</button>
+            </div>
+            <p class="muted">現状は認証なしのプロトタイプ同期です。Supabase 側の公開テーブル設定と RLS 方針は README と schema を確認してください。</p>
+          </div>
+
+          <h3>分析用文字列出力</h3>
           <div class="stack">
             <button type="button" class="secondary-button" id="build-export-button">文字列を生成</button>
             <textarea id="analysis-export" rows="18" readonly placeholder="ここに AI に渡すための文字列を生成します"></textarea>

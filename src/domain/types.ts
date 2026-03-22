@@ -12,29 +12,22 @@ export type FinishType =
 export type Side = "me" | "opponent";
 
 export type ServerSide = "me" | "opponent" | "unknown";
+export type PressureLevel = "normal" | "important" | "game_point" | "opponent_game_point";
+export type RallyLengthCategory = "short" | "medium" | "long";
 
 export type ZoneId =
-  | "Z1"
-  | "Z2"
-  | "Z3"
-  | "Z4"
-  | "Z5"
-  | "Z6"
-  | "Z7"
-  | "Z8"
-  | "Z9";
+  | "O1" | "O2" | "O3" | "O4" | "O5" | "O6" | "O7" | "O8" | "O9"
+  | "M1" | "M2" | "M3" | "M4" | "M5" | "M6" | "M7" | "M8" | "M9";
 
 export interface Match {
   id: string;
-  userId: string;
   title: string;
   opponentName?: string;
   matchDate: string;
   matchType: MatchType;
-  myTeamName?: string;
-  opponentTeamName?: string;
-  location?: string;
-  notes?: string;
+  playerLabel?: string;
+  focusTheme?: string;
+  points: PointWithShots[];
   createdAt: string;
   updatedAt: string;
 }
@@ -48,7 +41,8 @@ export interface Point {
   pointResult: PointResult;
   finishType: FinishType;
   serverSide?: ServerSide;
-  receiverSide?: ServerSide;
+  pressureLevel?: PressureLevel;
+  rallyLengthCategory?: RallyLengthCategory;
   memo?: string;
   createdAt: string;
   updatedAt: string;
@@ -77,7 +71,8 @@ export interface PointInputDraft {
   pointResult?: PointResult;
   finishType?: FinishType;
   serverSide?: ServerSide;
-  receiverSide?: ServerSide;
+  pressureLevel?: PressureLevel;
+  rallyLengthCategory?: RallyLengthCategory;
   memo?: string;
   shots: ShotDraft[];
 }
