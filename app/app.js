@@ -51,6 +51,7 @@ const state = {
   pointComposer: {
     shots: [],
   },
+  pendingFirstTap: null,
 };
 
 const el = {
@@ -61,6 +62,7 @@ const el = {
   courtBoard: document.getElementById('court-board'),
   shotStepIndicator: document.getElementById('shot-step-indicator'),
   pointResultIndicator: document.getElementById('point-result-indicator'),
+  finishTypeIndicator: document.getElementById('finish-type-indicator'),
   shotPreviewEmpty: document.getElementById('shot-preview-empty'),
   shotPreviewList: document.getElementById('shot-preview-list'),
   undoShotButton: document.getElementById('undo-shot-button'),
@@ -162,8 +164,24 @@ function getAutoPointResult() {
   return shot1.targetZoneId.startsWith('M') ? 'lost' : 'won';
 }
 
+function getAutoFinishType() {
+  const shot1 = state.pointComposer.shots.find((shot) => shot.reverseOrder === 1);
+  const pointResult = getAutoPointResult();
+  if (!shot1 || !pointResult) return undefined;
+
+  if (shot1.isMistake) {
+    return pointResult === 'won' ? 'opp_error' : 'my_error';
+  }
+
+  return pointResult === 'won' ? 'my_winner' : 'opp_winner';
+}
+
+function getEffectiveFinishType() {
+  return el.pointForm.finishType.value || getAutoFinishType();
+}
+
 function getLastShotHitter() {
-  return inferLastShotHitter(el.pointForm.finishType.value, getAutoPointResult());
+  return inferLastShotHitter(getEffectiveFinishType(), getAutoPointResult());
 }
 
 function deriveHitterForReverseOrder(reverseOrder, lastShotHitter) {
@@ -181,9 +199,13 @@ function syncComposerHitters() {
 
 function resetPointComposer() {
   state.pointComposer.shots = [];
+  if (state.pendingFirstTap) {
+    clearTimeout(state.pendingFirstTap);
+    state.pendingFirstTap = null;
+  }
 }
 
-function registerShot(zoneId) {
+function registerShot(zoneId, isMistake = false) {
   if (state.pointComposer.shots.length >= 5) {
     setFeedback('入力できるのは最大5球までです。保存するか、1つ戻してください。', 'error');
     return;
@@ -194,6 +216,7 @@ function registerShot(zoneId) {
     reverseOrder,
     hitterSide: deriveHitterForReverseOrder(reverseOrder, getLastShotHitter()),
     targetZoneId: zoneId,
+    isMistake: reverseOrder === 1 ? isMistake : false,
   };
 
   state.pointComposer.shots.push(shot);
@@ -206,6 +229,7 @@ function renderShotComposer() {
   const nextHitter = deriveHitterForReverseOrder(nextShot, getLastShotHitter());
   const canAddMore = state.pointComposer.shots.length < 5;
   const pointResult = getAutoPointResult();
+  const finishType = getEffectiveFinishType();
 
   el.shotStepIndicator.textContent = canAddMore
     ? `Shot${nextShot} を待機中 (${nextHitter === 'me' ? '自分' : '相手'})`
@@ -214,6 +238,10 @@ function renderShotComposer() {
     ? `自動判定: ${LABELS.pointResult[pointResult]}`
     : '得失点は最初のタップで自動判定';
   el.pointResultIndicator.className = `result-badge ${pointResult || 'pending'}`;
+  el.finishTypeIndicator.textContent = finishType
+    ? `決まり方: ${LABELS.finishType[finishType] || finishType}`
+    : '決まり方は最初のタップで自動判定';
+  el.finishTypeIndicator.className = `result-badge ${finishType ? 'info' : 'pending'}`;
 
   el.shotPreviewEmpty.classList.toggle('hidden', state.pointComposer.shots.length > 0);
   el.shotPreviewList.innerHTML = [...state.pointComposer.shots]
@@ -222,7 +250,7 @@ function renderShotComposer() {
       <div class="shot-preview-item">
         <span class="tag-pill">Shot${shot.reverseOrder}</span>
         <span>${shot.targetZoneId}</span>
-        <span class="muted">${shot.hitterSide === 'me' ? '自分' : '相手'}</span>
+        <span class="muted">${shot.hitterSide === 'me' ? '自分' : '相手'}${shot.isMistake ? ' / ミス' : ''}</span>
       </div>
     `)
     .join('');
@@ -244,7 +272,29 @@ function renderCourtBoard() {
       <small>${zone.courtSide === 'opponent' ? '相手コート' : '自陣'}</small>
     `;
     button.addEventListener('click', () => {
-      registerShot(zone.id);
+      if (state.pointComposer.shots.length > 0) {
+        registerShot(zone.id, false);
+        return;
+      }
+
+      if (state.pendingFirstTap) {
+        clearTimeout(state.pendingFirstTap);
+      }
+
+      state.pendingFirstTap = setTimeout(() => {
+        registerShot(zone.id, false);
+        state.pendingFirstTap = null;
+      }, 220);
+    });
+    button.addEventListener('dblclick', (event) => {
+      event.preventDefault();
+      if (state.pointComposer.shots.length === 0) {
+        if (state.pendingFirstTap) {
+          clearTimeout(state.pendingFirstTap);
+          state.pendingFirstTap = null;
+        }
+        registerShot(zone.id, true);
+      }
     });
     el.courtBoard.appendChild(button);
   });
@@ -261,7 +311,7 @@ function collectPointDraftFromForm(form, matchId) {
     myScoreAfter: fd.get('myScoreAfter') === '' ? undefined : Number(fd.get('myScoreAfter')),
     opponentScoreAfter: fd.get('opponentScoreAfter') === '' ? undefined : Number(fd.get('opponentScoreAfter')),
     pointResult: getAutoPointResult(),
-    finishType: fd.get('finishType') || undefined,
+    finishType: getEffectiveFinishType(),
     serverSide: fd.get('serverSide') || undefined,
     pressureLevel: fd.get('pressureLevel') || undefined,
     rallyLengthCategory: fd.get('rallyLengthCategory') || undefined,

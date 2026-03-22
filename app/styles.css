@@ -200,6 +200,11 @@ button:disabled {
   color: var(--accent-strong);
 }
 
+.result-badge.info {
+  background: rgba(22, 50, 79, 0.12);
+  color: #16324f;
+}
+
 .result-badge.lost {
   background: rgba(159, 18, 57, 0.12);
   color: var(--warn);
@@ -213,6 +218,7 @@ button:disabled {
   border: 2px solid #16324f;
   border-radius: 20px;
   background:
+    linear-gradient(180deg, transparent 49.2%, rgba(248, 250, 252, 0.98) 49.2%, rgba(248, 250, 252, 0.98) 50.8%, transparent 50.8%),
     linear-gradient(180deg, rgba(255,255,255,0.1) 32%, rgba(15,118,110,0.1) 32%, rgba(15,118,110,0.1) 36%, rgba(255,255,255,0.1) 36%, rgba(255,255,255,0.1) 64%, rgba(15,118,110,0.1) 64%, rgba(15,118,110,0.1) 68%, rgba(255,255,255,0.1) 68%),
     linear-gradient(90deg, rgba(255,255,255,0.08) 33%, rgba(255,255,255,0.18) 33%, rgba(255,255,255,0.18) 34%, rgba(255,255,255,0.08) 34%, rgba(255,255,255,0.08) 66%, rgba(255,255,255,0.18) 66%, rgba(255,255,255,0.18) 67%, rgba(255,255,255,0.08) 67%),
     linear-gradient(180deg, #2f855a 0%, #276749 100%);
@@ -233,11 +239,11 @@ button:disabled {
 }
 
 .court-zone.opponent {
-  background: rgba(236, 253, 245, 0.16);
+  background: rgba(110, 231, 183, 0.18);
 }
 
 .court-zone.me {
-  background: rgba(255, 251, 235, 0.14);
+  background: rgba(251, 191, 36, 0.18);
 }
 
 .court-zone small {
