@@ -48,6 +48,7 @@ const LABELS = {
 const state = {
   matches: [],
   selectedMatchId: null,
+  editingPointId: null,
   pointComposer: {
     shots: [],
   },
@@ -59,6 +60,10 @@ const el = {
   matchList: document.getElementById('match-list'),
   currentMatchInfo: document.getElementById('current-match-info'),
   pointForm: document.getElementById('point-form'),
+  editBanner: document.getElementById('edit-banner'),
+  editBannerText: document.getElementById('edit-banner-text'),
+  cancelEditButton: document.getElementById('cancel-edit-button'),
+  savePointButton: document.getElementById('save-point-button'),
   courtBoard: document.getElementById('court-board'),
   courtTrail: document.getElementById('court-trail'),
   shotStepIndicator: document.getElementById('shot-step-indicator'),
@@ -212,6 +217,46 @@ function resetPointComposer() {
     clearTimeout(state.pendingFirstTap);
     state.pendingFirstTap = null;
   }
+}
+
+function exitEditMode() {
+  state.editingPointId = null;
+}
+
+function applyPointToForm(point) {
+  state.editingPointId = point.id;
+  state.pointComposer.shots = [...point.shots]
+    .sort((a, b) => a.reverseOrder - b.reverseOrder)
+    .map((shot) => ({ ...shot }));
+
+  el.pointForm.pointNumber.value = String(point.pointNumber);
+  el.pointForm.myScoreAfter.value = point.myScoreAfter ?? '';
+  el.pointForm.opponentScoreAfter.value = point.opponentScoreAfter ?? '';
+  el.pointForm.finishType.value = point.finishType === getAutoFinishType() ? '' : (point.finishType || '');
+  el.pointForm.serverSide.value = point.serverSide || 'me';
+  el.pointForm.pressureLevel.value = point.pressureLevel || 'normal';
+  el.pointForm.rallyLengthCategory.value = point.rallyLengthCategory || 'medium';
+  el.pointForm.memo.value = point.memo || '';
+
+  el.editBanner.classList.remove('hidden');
+  el.editBannerText.textContent = `Point ${point.pointNumber} を編集中`;
+  el.savePointButton.textContent = '編集内容を保存';
+  setFeedback(`Point ${point.pointNumber} を読み込みました`, 'success');
+  renderShotComposer();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function resetPointFormForCreate(match) {
+  exitEditMode();
+  resetPointComposer();
+  el.pointForm.reset();
+  el.pointForm.pointNumber.value = String(nextPointNumber(match));
+  el.pointForm.serverSide.value = 'me';
+  el.pointForm.pressureLevel.value = 'normal';
+  el.pointForm.rallyLengthCategory.value = 'medium';
+  el.editBanner.classList.add('hidden');
+  el.savePointButton.textContent = '決定して次のポイントへ';
+  renderShotComposer();
 }
 
 function registerShot(zoneId, isMistake = false) {
@@ -461,8 +506,13 @@ function renderPointForm() {
 
   el.currentMatchInfo.textContent = `${match.title} / ${match.matchDate} / ${match.playerLabel || '自チーム未設定'} / point数: ${match.points.length}`;
   el.pointForm.classList.remove('hidden');
-  el.pointForm.pointNumber.value = String(nextPointNumber(match));
-  renderShotComposer();
+  if (!state.editingPointId) {
+    resetPointFormForCreate(match);
+  } else {
+    el.editBanner.classList.remove('hidden');
+    el.savePointButton.textContent = '編集内容を保存';
+    renderShotComposer();
+  }
 }
 
 function renderDetails() {
@@ -495,7 +545,10 @@ function renderDetails() {
         <td>${LABELS.pointResult[p.pointResult] || p.pointResult}</td>
         <td>${LABELS.finishType[p.finishType] || p.finishType}</td>
         <td>${p.shots.length}</td>
-        <td><button type="button" class="text-button" data-delete-point="${p.id}">削除</button></td>
+        <td class="action-cell">
+          <button type="button" class="secondary-button compact-button" data-edit-point="${p.id}">編集</button>
+          <button type="button" class="text-button compact-button" data-delete-point="${p.id}">削除</button>
+        </td>
       </tr>
     `)
     .join('');
@@ -537,9 +590,20 @@ function renderDetails() {
   el.pointList.querySelectorAll('[data-delete-point]').forEach((button) => {
     button.addEventListener('click', () => {
       match.points = match.points.filter((point) => point.id !== button.dataset.deletePoint);
+      if (state.editingPointId === button.dataset.deletePoint) {
+        resetPointFormForCreate(match);
+      }
       match.updatedAt = new Date().toISOString();
       saveState();
       render();
+    });
+  });
+
+  el.pointList.querySelectorAll('[data-edit-point]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const point = match.points.find((item) => item.id === button.dataset.editPoint);
+      if (!point) return;
+      applyPointToForm(point);
     });
   });
 }
@@ -592,6 +656,13 @@ el.clearShotsButton.addEventListener('click', () => {
   renderShotComposer();
 });
 
+el.cancelEditButton.addEventListener('click', () => {
+  const match = selectedMatch();
+  if (!match) return;
+  resetPointFormForCreate(match);
+  setFeedback('編集をキャンセルしました', 'success');
+});
+
 el.buildExportButton.addEventListener('click', () => {
   const match = selectedMatch();
   if (!match) return;
@@ -611,38 +682,52 @@ el.pointForm.addEventListener('submit', (e) => {
     return;
   }
 
-  if (match.points.some((p) => p.pointNumber === draft.pointNumber)) {
+  if (match.points.some((p) => p.pointNumber === draft.pointNumber && p.id !== state.editingPointId)) {
     setFeedback('同一試合内でポイント番号が重複しています', 'error');
     return;
   }
 
-  const point = {
-    id: uid(),
-    matchId: match.id,
-    pointNumber: draft.pointNumber,
-    myScoreAfter: draft.myScoreAfter,
-    opponentScoreAfter: draft.opponentScoreAfter,
-    pointResult: draft.pointResult,
-    finishType: draft.finishType,
-    serverSide: draft.serverSide,
-    pressureLevel: draft.pressureLevel,
-    rallyLengthCategory: draft.rallyLengthCategory,
-    memo: draft.memo,
-    shots: result.normalizedShots,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
+  const existingPoint = state.editingPointId
+    ? match.points.find((point) => point.id === state.editingPointId)
+    : null;
 
-  match.points.push(point);
+  if (existingPoint) {
+    existingPoint.pointNumber = draft.pointNumber;
+    existingPoint.myScoreAfter = draft.myScoreAfter;
+    existingPoint.opponentScoreAfter = draft.opponentScoreAfter;
+    existingPoint.pointResult = draft.pointResult;
+    existingPoint.finishType = draft.finishType;
+    existingPoint.serverSide = draft.serverSide;
+    existingPoint.pressureLevel = draft.pressureLevel;
+    existingPoint.rallyLengthCategory = draft.rallyLengthCategory;
+    existingPoint.memo = draft.memo;
+    existingPoint.shots = result.normalizedShots;
+    existingPoint.updatedAt = new Date().toISOString();
+  } else {
+    const point = {
+      id: uid(),
+      matchId: match.id,
+      pointNumber: draft.pointNumber,
+      myScoreAfter: draft.myScoreAfter,
+      opponentScoreAfter: draft.opponentScoreAfter,
+      pointResult: draft.pointResult,
+      finishType: draft.finishType,
+      serverSide: draft.serverSide,
+      pressureLevel: draft.pressureLevel,
+      rallyLengthCategory: draft.rallyLengthCategory,
+      memo: draft.memo,
+      shots: result.normalizedShots,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    match.points.push(point);
+  }
   match.updatedAt = new Date().toISOString();
 
   saveState();
-  setFeedback('ポイントを保存しました', 'success');
-  resetPointComposer();
-  el.pointForm.reset();
-  el.pointForm.serverSide.value = 'me';
-  el.pointForm.pressureLevel.value = 'normal';
-  el.pointForm.rallyLengthCategory.value = 'medium';
+  setFeedback(existingPoint ? 'ポイントを更新しました' : 'ポイントを保存しました', 'success');
+  resetPointFormForCreate(match);
   render();
 });
 

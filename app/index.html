@@ -38,6 +38,11 @@
         <h2>ポイント入力</h2>
         <div id="current-match-info" class="muted">試合を選択してください</div>
         <form id="point-form" class="stack hidden">
+          <div class="edit-banner hidden" id="edit-banner">
+            <span id="edit-banner-text">編集中</span>
+            <button type="button" class="secondary-button" id="cancel-edit-button">編集をやめる</button>
+          </div>
+
           <div class="input-header-card">
             <div class="inline">
               <label>Point #<input name="pointNumber" type="number" min="1" required /></label>
@@ -122,7 +127,7 @@
           </div>
 
           <div id="point-feedback" class="feedback" aria-live="polite"></div>
-          <button type="submit">決定して次のポイントへ</button>
+          <button type="submit" id="save-point-button">決定して次のポイントへ</button>
         </form>
       </section>
 
