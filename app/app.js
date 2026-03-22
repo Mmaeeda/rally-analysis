@@ -60,6 +60,7 @@ const el = {
   currentMatchInfo: document.getElementById('current-match-info'),
   pointForm: document.getElementById('point-form'),
   courtBoard: document.getElementById('court-board'),
+  courtTrail: document.getElementById('court-trail'),
   shotStepIndicator: document.getElementById('shot-step-indicator'),
   pointResultIndicator: document.getElementById('point-result-indicator'),
   finishTypeIndicator: document.getElementById('finish-type-indicator'),
@@ -73,6 +74,8 @@ const el = {
   analysisSummary: document.getElementById('analysis-summary'),
   pointList: document.getElementById('point-list'),
   analysis: document.getElementById('analysis'),
+  buildExportButton: document.getElementById('build-export-button'),
+  analysisExport: document.getElementById('analysis-export'),
 };
 
 function uid() {
@@ -141,6 +144,12 @@ function renderMetricRows(items, labels) {
         .join('') || '<p class="muted">データなし</p>'}
     </div>
   `;
+}
+
+function zoneLabel(zoneId) {
+  if (!zoneId) return '-';
+  const side = zoneId.startsWith('O') ? '相手' : '自陣';
+  return `${side}${zoneId.slice(1)}`;
 }
 
 function inferLastShotHitter(finishType, pointResult) {
@@ -249,7 +258,7 @@ function renderShotComposer() {
     .map((shot) => `
       <div class="shot-preview-item">
         <span class="tag-pill">Shot${shot.reverseOrder}</span>
-        <span>${shot.targetZoneId}</span>
+        <span>${zoneLabel(shot.targetZoneId)}</span>
         <span class="muted">${shot.hitterSide === 'me' ? '自分' : '相手'}${shot.isMistake ? ' / ミス' : ''}</span>
       </div>
     `)
@@ -257,10 +266,26 @@ function renderShotComposer() {
 
   el.undoShotButton.disabled = state.pointComposer.shots.length === 0;
   el.clearShotsButton.disabled = state.pointComposer.shots.length === 0;
+
+  const zoneButtons = [...el.courtBoard.querySelectorAll('.court-zone')];
+  zoneButtons.forEach((button) => {
+    button.classList.remove('selected');
+    delete button.dataset.shotOrder;
+  });
+
+  state.pointComposer.shots.forEach((shot) => {
+    const zoneButton = el.courtBoard.querySelector(`[data-zone-id="${shot.targetZoneId}"]`);
+    if (!zoneButton) return;
+    zoneButton.classList.add('selected');
+    zoneButton.dataset.shotOrder = String(shot.reverseOrder);
+  });
+
+  renderCourtTrail();
 }
 
 function renderCourtBoard() {
   el.courtBoard.innerHTML = '';
+  el.courtBoard.appendChild(el.courtTrail);
 
   COURT_ZONES.forEach((zone) => {
     const button = document.createElement('button');
@@ -300,6 +325,81 @@ function renderCourtBoard() {
   });
 
   renderShotComposer();
+}
+
+function renderCourtTrail() {
+  const orderedShots = [...state.pointComposer.shots].sort((a, b) => a.reverseOrder - b.reverseOrder);
+  if (orderedShots.length < 2) {
+    el.courtTrail.innerHTML = '';
+    return;
+  }
+
+  const boardRect = el.courtBoard.getBoundingClientRect();
+  const points = orderedShots.map((shot) => {
+    const zoneButton = el.courtBoard.querySelector(`[data-zone-id="${shot.targetZoneId}"]`);
+    if (!zoneButton) return null;
+    const rect = zoneButton.getBoundingClientRect();
+    return {
+      x: rect.left - boardRect.left + (rect.width / 2),
+      y: rect.top - boardRect.top + (rect.height / 2),
+    };
+  }).filter(Boolean);
+
+  el.courtTrail.setAttribute('viewBox', `0 0 ${boardRect.width} ${boardRect.height}`);
+  el.courtTrail.innerHTML = points
+    .slice(0, -1)
+    .map((point, index) => {
+      const nextPoint = points[index + 1];
+      return `
+        <line
+          x1="${point.x}"
+          y1="${point.y}"
+          x2="${nextPoint.x}"
+          y2="${nextPoint.y}"
+          stroke="#f8fafc"
+          stroke-width="5"
+          stroke-linecap="round"
+          opacity="0.9"
+        />
+      `;
+    })
+    .join('');
+}
+
+function buildMatchExport(match) {
+  const ordered = [...match.points].sort((a, b) => a.pointNumber - b.pointNumber);
+  const analysis = buildMatchAnalysis(ordered);
+
+  const pointLines = ordered.map((point) => {
+    const shots = [...point.shots]
+      .sort((a, b) => a.reverseOrder - b.reverseOrder)
+      .map((shot) => `Shot${shot.reverseOrder}:${shot.hitterSide === 'me' ? '自分' : '相手'}:${zoneLabel(shot.targetZoneId)}`)
+      .join(' | ');
+
+    return [
+      `Point ${point.pointNumber}`,
+      `score=${point.myScoreAfter ?? '-'}-${point.opponentScoreAfter ?? '-'}`,
+      `result=${point.pointResult}`,
+      `finish=${point.finishType}`,
+      `server=${point.serverSide}`,
+      `pressure=${point.pressureLevel}`,
+      `length=${point.rallyLengthCategory}`,
+      `shots=[${shots}]`,
+      `memo=${point.memo || '-'}`,
+    ].join(', ');
+  });
+
+  return [
+    `match_title: ${match.title}`,
+    `opponent: ${match.opponentName || '-'}`,
+    `match_date: ${match.matchDate}`,
+    `match_type: ${match.matchType}`,
+    `team_label: ${match.playerLabel || '-'}`,
+    `focus_theme: ${match.focusTheme || '-'}`,
+    `summary: total_points=${analysis.totals.totalPoints}, win_rate=${analysis.totals.winRate}%, pressure_win_rate=${analysis.totals.pressureWinRate}%`,
+    'points:',
+    ...pointLines,
+  ].join('\n');
 }
 
 function collectPointDraftFromForm(form, matchId) {
@@ -432,6 +532,7 @@ function renderDetails() {
       </div>
     </div>
   `;
+  el.analysisExport.value = buildMatchExport(match);
 
   el.pointList.querySelectorAll('[data-delete-point]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -489,6 +590,13 @@ el.clearShotsButton.addEventListener('click', () => {
   resetPointComposer();
   setFeedback('ショット入力をクリアしました', 'success');
   renderShotComposer();
+});
+
+el.buildExportButton.addEventListener('click', () => {
+  const match = selectedMatch();
+  if (!match) return;
+  el.analysisExport.value = buildMatchExport(match);
+  setFeedback('AI連携用テキストを更新しました', 'success');
 });
 
 el.pointForm.addEventListener('submit', (e) => {

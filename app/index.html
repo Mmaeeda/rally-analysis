@@ -98,7 +98,9 @@
                 </div>
               </div>
 
-              <div class="court-board" id="court-board" aria-label="コート入力エリア"></div>
+              <div class="court-board" id="court-board" aria-label="コート入力エリア">
+                <svg class="court-trail" id="court-trail" aria-hidden="true"></svg>
+              </div>
 
               <div class="inline">
                 <button type="button" class="secondary-button" id="undo-shot-button">1つ戻す</button>
@@ -149,6 +151,12 @@
 
           <h3>分析</h3>
           <div id="analysis"></div>
+
+          <h3>AI連携用テキスト</h3>
+          <div class="stack">
+            <button type="button" class="secondary-button" id="build-export-button">文字列を生成</button>
+            <textarea id="analysis-export" rows="12" readonly placeholder="ここに AI に渡すための文字列を生成します"></textarea>
+          </div>
         </div>
       </section>
     </main>
