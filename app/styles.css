@@ -43,10 +43,34 @@ header p {
   color: rgba(248, 250, 252, 0.84);
 }
 
+.page-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+}
+
+.page-nav a {
+  color: #f8fafc;
+  text-decoration: none;
+  padding: 0.45rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.12);
+}
+
+.page-nav a.active {
+  background: rgba(248, 250, 252, 0.92);
+  color: #16324f;
+}
+
 .layout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 1.1rem;
+  padding: 1.1rem;
+}
+
+.single-layout {
   padding: 1.1rem;
 }
 

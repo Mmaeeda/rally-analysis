@@ -84,6 +84,8 @@ const el = {
   analysisExport: document.getElementById('analysis-export'),
 };
 
+const currentPage = document.body?.dataset.page || 'unknown';
+
 function uid() {
   return crypto.randomUUID();
 }
@@ -106,6 +108,11 @@ function saveState() {
     matches: state.matches,
     selectedMatchId: state.selectedMatchId,
   }));
+}
+
+function replaceInputUrlWithoutEdit() {
+  if (currentPage !== 'input') return;
+  window.history.replaceState({}, '', './input.html');
 }
 
 function selectedMatch() {
@@ -273,6 +280,11 @@ function exitEditMode() {
 }
 
 function applyPointToForm(point) {
+  if (currentPage !== 'input') {
+    window.location.href = `./input.html?editPointId=${encodeURIComponent(point.id)}`;
+    return;
+  }
+
   state.editingPointId = point.id;
   state.pointComposer.shots = [...point.shots]
     .sort((a, b) => a.reverseOrder - b.reverseOrder)
@@ -292,10 +304,12 @@ function applyPointToForm(point) {
   el.savePointButton.textContent = '編集内容を保存';
   setFeedback(`Point ${point.pointNumber} を読み込みました`, 'success');
   renderShotComposer();
+  replaceInputUrlWithoutEdit();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function resetPointFormForCreate(match) {
+  if (!el.pointForm) return;
   exitEditMode();
   resetPointComposer();
   el.pointForm.reset();
@@ -306,6 +320,7 @@ function resetPointFormForCreate(match) {
   el.editBanner.classList.add('hidden');
   el.savePointButton.textContent = '決定して次のポイントへ';
   renderShotComposer();
+  replaceInputUrlWithoutEdit();
 }
 
 function registerShot(zoneId, isMistake = false) {
@@ -522,6 +537,7 @@ function nextPointNumber(match) {
 }
 
 function renderMatchList() {
+  if (!el.matchList) return;
   el.matchList.innerHTML = '';
 
   state.matches.forEach((m) => {
@@ -548,6 +564,7 @@ function renderMatchList() {
 }
 
 function renderPointForm() {
+  if (!el.pointForm || !el.currentMatchInfo) return;
   const match = selectedMatch();
   if (!match) {
     el.currentMatchInfo.textContent = '試合を選択してください';
@@ -567,6 +584,7 @@ function renderPointForm() {
 }
 
 function renderDetails() {
+  if (!el.detailEmpty || !el.detailContent) return;
   const match = selectedMatch();
   if (!match) {
     el.detailEmpty.classList.remove('hidden');
@@ -579,96 +597,108 @@ function renderDetails() {
 
   const ordered = [...match.points].sort((a, b) => a.pointNumber - b.pointNumber);
   const analysis = buildMatchAnalysis(ordered);
-  el.analysisSummary.innerHTML = `
-    <div class="summary-card"><span class="muted">総ポイント</span><strong>${analysis.totals.totalPoints}</strong></div>
-    <div class="summary-card"><span class="muted">勝率</span><strong>${analysis.totals.winRate}%</strong></div>
-    <div class="summary-card"><span class="muted">平均記録打数</span><strong>${analysis.totals.averageRecordedShots}</strong></div>
-    <div class="summary-card"><span class="muted">勝負所勝率</span><strong>${analysis.totals.pressureWinRate}%</strong></div>
-  `;
+  if (el.analysisSummary) {
+    el.analysisSummary.innerHTML = `
+      <div class="summary-card"><span class="muted">総ポイント</span><strong>${analysis.totals.totalPoints}</strong></div>
+      <div class="summary-card"><span class="muted">勝率</span><strong>${analysis.totals.winRate}%</strong></div>
+      <div class="summary-card"><span class="muted">平均記録打数</span><strong>${analysis.totals.averageRecordedShots}</strong></div>
+      <div class="summary-card"><span class="muted">勝負所勝率</span><strong>${analysis.totals.pressureWinRate}%</strong></div>
+    `;
+  }
 
-  el.pointList.innerHTML = ordered
-    .map((p) => `
-      <tr>
-        <td>${p.pointNumber}</td>
-        <td>${p.myScoreAfter ?? '-'}-${p.opponentScoreAfter ?? '-'}</td>
-        <td>${LABELS.serverSide[p.serverSide] || '-'}</td>
-        <td>${LABELS.pressureLevel[p.pressureLevel] || '-'}</td>
-        <td>${LABELS.pointResult[p.pointResult] || p.pointResult}</td>
-        <td>${LABELS.finishType[p.finishType] || p.finishType}</td>
-        <td>${p.shots.length}</td>
-        <td class="action-cell">
-          <button type="button" class="secondary-button compact-button" data-edit-point="${p.id}">編集</button>
-          <button type="button" class="text-button compact-button" data-delete-point="${p.id}">削除</button>
-        </td>
-      </tr>
-    `)
-    .join('');
+  if (el.pointList) {
+    el.pointList.innerHTML = ordered
+      .map((p) => `
+        <tr>
+          <td>${p.pointNumber}</td>
+          <td>${p.myScoreAfter ?? '-'}-${p.opponentScoreAfter ?? '-'}</td>
+          <td>${LABELS.serverSide[p.serverSide] || '-'}</td>
+          <td>${LABELS.pressureLevel[p.pressureLevel] || '-'}</td>
+          <td>${LABELS.pointResult[p.pointResult] || p.pointResult}</td>
+          <td>${LABELS.finishType[p.finishType] || p.finishType}</td>
+          <td>${p.shots.length}</td>
+          <td class="action-cell">
+            <button type="button" class="secondary-button compact-button" data-edit-point="${p.id}">編集</button>
+            <button type="button" class="text-button compact-button" data-delete-point="${p.id}">削除</button>
+          </td>
+        </tr>
+      `)
+      .join('');
 
-  el.analysis.innerHTML = `
-    <div class="analysis-grid">
-      <div class="analysis-card">
-        <span class="muted">サーブ側別成績</span>
-        ${renderMetricRows(analysis.byServerSide, LABELS.serverSide)}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">局面別成績</span>
-        ${renderMetricRows(analysis.byPressureLevel, LABELS.pressureLevel)}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">ラリー長さ別成績</span>
-        ${renderMetricRows(analysis.byRallyLength, LABELS.rallyLengthCategory)}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">得点時の決まり方</span>
-        ${renderTagRows(analysis.wonFinishes, 'まだ得点データがありません')}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">失点時の決まり方</span>
-        ${renderTagRows(analysis.lostFinishes, 'まだ失点データがありません')}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">得点につながった最終打球ゾーン</span>
-        ${renderTagRows(analysis.winningZones, 'ゾーンデータがありません')}
-      </div>
-      <div class="analysis-card">
-        <span class="muted">失点につながった最終打球ゾーン</span>
-        ${renderTagRows(analysis.losingZones, 'ゾーンデータがありません')}
-      </div>
-    </div>
-  `;
-  el.analysisExport.value = buildMatchExport(match);
-  el.trajectoryGallery.innerHTML = ordered.length
-    ? ordered.map((point) => `
-      <article class="trajectory-card">
-        <div class="trajectory-card-header">
-          <strong>Point ${point.pointNumber}</strong>
-          <span class="tag-pill">${LABELS.pointResult[point.pointResult] || point.pointResult}</span>
+    el.pointList.querySelectorAll('[data-delete-point]').forEach((button) => {
+      button.addEventListener('click', () => {
+        match.points = match.points.filter((point) => point.id !== button.dataset.deletePoint);
+        if (state.editingPointId === button.dataset.deletePoint) {
+          state.editingPointId = null;
+        }
+        match.updatedAt = new Date().toISOString();
+        saveState();
+        render();
+      });
+    });
+
+    el.pointList.querySelectorAll('[data-edit-point]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const point = match.points.find((item) => item.id === button.dataset.editPoint);
+        if (!point) return;
+        applyPointToForm(point);
+      });
+    });
+  }
+
+  if (el.analysis) {
+    el.analysis.innerHTML = `
+      <div class="analysis-grid">
+        <div class="analysis-card">
+          <span class="muted">サーブ側別成績</span>
+          ${renderMetricRows(analysis.byServerSide, LABELS.serverSide)}
         </div>
-        ${buildTrajectorySvg(point.shots)}
-        <div class="muted">${LABELS.finishType[point.finishType] || point.finishType} / ${point.shots.length}球</div>
-      </article>
-    `).join('')
-    : '<p class="muted">ポイントが入るとここに軌跡プレビューを表示します。</p>';
+        <div class="analysis-card">
+          <span class="muted">局面別成績</span>
+          ${renderMetricRows(analysis.byPressureLevel, LABELS.pressureLevel)}
+        </div>
+        <div class="analysis-card">
+          <span class="muted">ラリー長さ別成績</span>
+          ${renderMetricRows(analysis.byRallyLength, LABELS.rallyLengthCategory)}
+        </div>
+        <div class="analysis-card">
+          <span class="muted">得点時の決まり方</span>
+          ${renderTagRows(analysis.wonFinishes, 'まだ得点データがありません')}
+        </div>
+        <div class="analysis-card">
+          <span class="muted">失点時の決まり方</span>
+          ${renderTagRows(analysis.lostFinishes, 'まだ失点データがありません')}
+        </div>
+        <div class="analysis-card">
+          <span class="muted">得点につながった最終打球ゾーン</span>
+          ${renderTagRows(analysis.winningZones, 'ゾーンデータがありません')}
+        </div>
+        <div class="analysis-card">
+          <span class="muted">失点につながった最終打球ゾーン</span>
+          ${renderTagRows(analysis.losingZones, 'ゾーンデータがありません')}
+        </div>
+      </div>
+    `;
+  }
 
-  el.pointList.querySelectorAll('[data-delete-point]').forEach((button) => {
-    button.addEventListener('click', () => {
-      match.points = match.points.filter((point) => point.id !== button.dataset.deletePoint);
-      if (state.editingPointId === button.dataset.deletePoint) {
-        resetPointFormForCreate(match);
-      }
-      match.updatedAt = new Date().toISOString();
-      saveState();
-      render();
-    });
-  });
+  if (el.analysisExport) {
+    el.analysisExport.value = buildMatchExport(match);
+  }
 
-  el.pointList.querySelectorAll('[data-edit-point]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const point = match.points.find((item) => item.id === button.dataset.editPoint);
-      if (!point) return;
-      applyPointToForm(point);
-    });
-  });
+  if (el.trajectoryGallery) {
+    el.trajectoryGallery.innerHTML = ordered.length
+      ? ordered.map((point) => `
+        <article class="trajectory-card">
+          <div class="trajectory-card-header">
+            <strong>Point ${point.pointNumber}</strong>
+            <span class="tag-pill">${LABELS.pointResult[point.pointResult] || point.pointResult}</span>
+          </div>
+          ${buildTrajectorySvg(point.shots)}
+          <div class="muted">${LABELS.finishType[point.finishType] || point.finishType} / ${point.shots.length}球</div>
+        </article>
+      `).join('')
+      : '<p class="muted">ポイントが入るとここに軌跡プレビューを表示します。</p>';
+  }
 }
 
 function render() {
@@ -677,123 +707,146 @@ function render() {
   renderDetails();
 }
 
-el.createMatchForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const fd = new FormData(el.createMatchForm);
+if (el.createMatchForm) {
+  el.createMatchForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const fd = new FormData(el.createMatchForm);
 
-  const match = {
-    id: uid(),
-    title: String(fd.get('title')),
-    opponentName: String(fd.get('opponentName') || ''),
-    playerLabel: String(fd.get('playerLabel') || ''),
-    focusTheme: String(fd.get('focusTheme') || ''),
-    matchDate: String(fd.get('matchDate')),
-    matchType: String(fd.get('matchType')),
-    points: [],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  };
-
-  state.matches.unshift(match);
-  state.selectedMatchId = match.id;
-  saveState();
-  el.createMatchForm.reset();
-  setFeedback('');
-  render();
-});
-
-el.pointForm.finishType.addEventListener('change', () => {
-  syncComposerHitters();
-  renderShotComposer();
-});
-
-el.undoShotButton.addEventListener('click', () => {
-  state.pointComposer.shots.pop();
-  setFeedback('直前の球を取り消しました', 'success');
-  renderShotComposer();
-});
-
-el.clearShotsButton.addEventListener('click', () => {
-  resetPointComposer();
-  setFeedback('ショット入力をクリアしました', 'success');
-  renderShotComposer();
-});
-
-el.cancelEditButton.addEventListener('click', () => {
-  const match = selectedMatch();
-  if (!match) return;
-  resetPointFormForCreate(match);
-  setFeedback('編集をキャンセルしました', 'success');
-});
-
-el.buildExportButton.addEventListener('click', () => {
-  const match = selectedMatch();
-  if (!match) return;
-  el.analysisExport.value = buildMatchExport(match);
-  setFeedback('AI連携用テキストを更新しました', 'success');
-});
-
-el.pointForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  const match = selectedMatch();
-  if (!match) return;
-
-  const draft = collectPointDraftFromForm(el.pointForm, match.id);
-  const result = validatePointInputDraft(draft);
-  if (!result.ok) {
-    setFeedback(result.errors.join('\n'), 'error');
-    return;
-  }
-
-  if (match.points.some((p) => p.pointNumber === draft.pointNumber && p.id !== state.editingPointId)) {
-    setFeedback('同一試合内でポイント番号が重複しています', 'error');
-    return;
-  }
-
-  const existingPoint = state.editingPointId
-    ? match.points.find((point) => point.id === state.editingPointId)
-    : null;
-
-  if (existingPoint) {
-    existingPoint.pointNumber = draft.pointNumber;
-    existingPoint.myScoreAfter = draft.myScoreAfter;
-    existingPoint.opponentScoreAfter = draft.opponentScoreAfter;
-    existingPoint.pointResult = draft.pointResult;
-    existingPoint.finishType = draft.finishType;
-    existingPoint.serverSide = draft.serverSide;
-    existingPoint.pressureLevel = draft.pressureLevel;
-    existingPoint.rallyLengthCategory = draft.rallyLengthCategory;
-    existingPoint.memo = draft.memo;
-    existingPoint.shots = result.normalizedShots;
-    existingPoint.updatedAt = new Date().toISOString();
-  } else {
-    const point = {
+    const match = {
       id: uid(),
-      matchId: match.id,
-      pointNumber: draft.pointNumber,
-      myScoreAfter: draft.myScoreAfter,
-      opponentScoreAfter: draft.opponentScoreAfter,
-      pointResult: draft.pointResult,
-      finishType: draft.finishType,
-      serverSide: draft.serverSide,
-      pressureLevel: draft.pressureLevel,
-      rallyLengthCategory: draft.rallyLengthCategory,
-      memo: draft.memo,
-      shots: result.normalizedShots,
+      title: String(fd.get('title')),
+      opponentName: String(fd.get('opponentName') || ''),
+      playerLabel: String(fd.get('playerLabel') || ''),
+      focusTheme: String(fd.get('focusTheme') || ''),
+      matchDate: String(fd.get('matchDate')),
+      matchType: String(fd.get('matchType')),
+      points: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    match.points.push(point);
-  }
-  match.updatedAt = new Date().toISOString();
+    state.matches.unshift(match);
+    state.selectedMatchId = match.id;
+    saveState();
+    el.createMatchForm.reset();
+    render();
+  });
+}
 
-  saveState();
-  setFeedback(existingPoint ? 'ポイントを更新しました' : 'ポイントを保存しました', 'success');
-  resetPointFormForCreate(match);
-  render();
-});
+if (el.pointForm) {
+  el.pointForm.finishType.addEventListener('change', () => {
+    syncComposerHitters();
+    renderShotComposer();
+  });
+
+  el.pointForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const match = selectedMatch();
+    if (!match) return;
+
+    const draft = collectPointDraftFromForm(el.pointForm, match.id);
+    const result = validatePointInputDraft(draft);
+    if (!result.ok) {
+      setFeedback(result.errors.join('\n'), 'error');
+      return;
+    }
+
+    if (match.points.some((p) => p.pointNumber === draft.pointNumber && p.id !== state.editingPointId)) {
+      setFeedback('同一試合内でポイント番号が重複しています', 'error');
+      return;
+    }
+
+    const existingPoint = state.editingPointId
+      ? match.points.find((point) => point.id === state.editingPointId)
+      : null;
+
+    if (existingPoint) {
+      existingPoint.pointNumber = draft.pointNumber;
+      existingPoint.myScoreAfter = draft.myScoreAfter;
+      existingPoint.opponentScoreAfter = draft.opponentScoreAfter;
+      existingPoint.pointResult = draft.pointResult;
+      existingPoint.finishType = draft.finishType;
+      existingPoint.serverSide = draft.serverSide;
+      existingPoint.pressureLevel = draft.pressureLevel;
+      existingPoint.rallyLengthCategory = draft.rallyLengthCategory;
+      existingPoint.memo = draft.memo;
+      existingPoint.shots = result.normalizedShots;
+      existingPoint.updatedAt = new Date().toISOString();
+    } else {
+      const point = {
+        id: uid(),
+        matchId: match.id,
+        pointNumber: draft.pointNumber,
+        myScoreAfter: draft.myScoreAfter,
+        opponentScoreAfter: draft.opponentScoreAfter,
+        pointResult: draft.pointResult,
+        finishType: draft.finishType,
+        serverSide: draft.serverSide,
+        pressureLevel: draft.pressureLevel,
+        rallyLengthCategory: draft.rallyLengthCategory,
+        memo: draft.memo,
+        shots: result.normalizedShots,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      match.points.push(point);
+    }
+    match.updatedAt = new Date().toISOString();
+
+    saveState();
+    setFeedback(existingPoint ? 'ポイントを更新しました' : 'ポイントを保存しました', 'success');
+    resetPointFormForCreate(match);
+    render();
+  });
+}
+
+if (el.undoShotButton) {
+  el.undoShotButton.addEventListener('click', () => {
+    state.pointComposer.shots.pop();
+    setFeedback('直前の球を取り消しました', 'success');
+    renderShotComposer();
+  });
+}
+
+if (el.clearShotsButton) {
+  el.clearShotsButton.addEventListener('click', () => {
+    resetPointComposer();
+    setFeedback('ショット入力をクリアしました', 'success');
+    renderShotComposer();
+  });
+}
+
+if (el.cancelEditButton) {
+  el.cancelEditButton.addEventListener('click', () => {
+    const match = selectedMatch();
+    if (!match) return;
+    resetPointFormForCreate(match);
+    setFeedback('編集をキャンセルしました', 'success');
+  });
+}
+
+if (el.buildExportButton) {
+  el.buildExportButton.addEventListener('click', () => {
+    const match = selectedMatch();
+    if (!match || !el.analysisExport) return;
+    el.analysisExport.value = buildMatchExport(match);
+  });
+}
 
 loadState();
-renderCourtBoard();
+if (el.courtBoard) {
+  renderCourtBoard();
+}
+
+if (currentPage === 'input') {
+  const editPointId = new URLSearchParams(window.location.search).get('editPointId');
+  if (editPointId) {
+    const match = selectedMatch();
+    const point = match?.points.find((item) => item.id === editPointId);
+    if (point) {
+      applyPointToForm(point);
+    }
+  }
+}
 render();

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>内容分析 | Pickleball Rally Analysis</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="analysis">
+    <header>
+      <h1>Pickleball Rally Analysis</h1>
+      <p>選択中の試合のポイント履歴と分析を確認します。</p>
+      <nav class="page-nav">
+        <a href="./matches.html">試合一覧</a>
+        <a href="./input.html">ポイント入力</a>
+        <a class="active" href="./analysis.html">内容分析</a>
+        <a href="./trajectories.html">ボール軌跡</a>
+        <a href="./export.html">文字列出力</a>
+      </nav>
+    </header>
+
+    <main class="single-layout">
+      <section class="panel">
+        <h2>内容分析</h2>
+        <div id="detail-empty" class="muted">試合を選択すると表示されます</div>
+        <div id="detail-content" class="hidden">
+          <div id="analysis-summary" class="analysis-summary"></div>
+          <h3>ポイント履歴</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Score</th>
+                <th>サーブ</th>
+                <th>局面</th>
+                <th>結果</th>
+                <th>決まり方</th>
+                <th>ショット数</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="point-list"></tbody>
+          </table>
+          <h3>分析</h3>
+          <div id="analysis"></div>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>試合一覧 | Pickleball Rally Analysis</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body data-page="matches">
+    <header>
+      <h1>Pickleball Rally Analysis</h1>
+      <p>試合一覧、入力、分析、軌跡、AI 出力をページ分割しています。</p>
+      <nav class="page-nav">
+        <a class="active" href="./matches.html">試合一覧</a>
+        <a href="./input.html">ポイント入力</a>
+        <a href="./analysis.html">内容分析</a>
+        <a href="./trajectories.html">ボール軌跡</a>
+        <a href="./export.html">文字列出力</a>
+      </nav>
+    </header>
+
+    <main class="single-layout">
+      <section class="panel">
+        <h2>試合一覧 / 作成</h2>
+        <form id="create-match-form" class="stack">
+          <input name="title" placeholder="試合名（例: 3月練習試合）" required />
+          <input name="opponentName" placeholder="対戦相手（例: Team A）" />
+          <div class="inline">
+            <input name="playerLabel" placeholder="自チーム名（例: Mae/Aki）" />
+            <input name="focusTheme" placeholder="振り返りテーマ（例: 3球目攻撃）" />
+          </div>
+          <div class="inline">
+            <input type="date" name="matchDate" required />
+            <select name="matchType" required>
+              <option value="singles">singles</option>
+              <option value="doubles" selected>doubles</option>
+            </select>
+          </div>
+          <button type="submit">試合を作成</button>
+        </form>
+        <ul id="match-list"></ul>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
